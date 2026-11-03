@@ -1,5 +1,5 @@
 // Trener AI. Kolejność dostawców:
-// 1) funkcja Netlify (/.netlify/functions/ai) z kluczem Claude API – produkcja
+// 1) funkcja Netlify (/.netlify/functions/ai) z kluczem Gemini (lub Claude) – produkcja
 // 2) wbudowane „zapytaj Claude” w podglądzie artefaktu
 // 3) brak AI → algorytm lokalny (zawsze działa)
 import { api } from './backend.js';

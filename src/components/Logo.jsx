@@ -1,49 +1,59 @@
 import { motion, useAnimation, useReducedMotion } from 'framer-motion';
 import { useEffect, useId, useState } from 'react';
 
-// Strzykawka wbija się w pośladek: igła wjeżdża, tłok dociska, pośladek „pompuje się”.
+// Pompka pompuje hantel: dwa ruchy tłoka, hantel „rośnie” z każdym, na koniec błysk.
 export function LogoMark({ size = 44, play = 0 }) {
-  const syr = useAnimation(), rod = useAnimation(), liq = useAnimation(), butt = useAnimation();
+  const handle = useAnimation(), bell = useAnimation(), spark = useAnimation(), air = useAnimation();
   const reduce = useReducedMotion();
-  const gid = 'pjb' + useId().replace(/[^a-zA-Z0-9]/g, '');
+  const gid = 'pjg' + useId().replace(/[^a-zA-Z0-9]/g, '');
   useEffect(() => {
     let off = false;
     (async () => {
-      if (reduce) { syr.set({ x: 0 }); rod.set({ x: 9 }); liq.set({ scaleX: 0.2 }); return; }
-      syr.set({ x: -9 }); rod.set({ x: 0 }); liq.set({ scaleX: 1 }); butt.set({ scale: 1 });
-      await syr.start({ x: 0, transition: { duration: 0.35, ease: [0.5, 0, 0.75, 0] } });
-      if (off) return;
-      butt.start({ scale: [1, 0.96, 1], transition: { duration: 0.25 } });
-      await Promise.all([rod.start({ x: 9, transition: { duration: 0.6, ease: 'easeInOut' } }), liq.start({ scaleX: 0.2, transition: { duration: 0.6, ease: 'easeInOut' } })]);
-      if (off) return;
-      await butt.start({ scale: [1, 1.1, 1.04], transition: { duration: 0.45, ease: 'easeOut' } });
+      if (reduce) return;
+      const stroke = async scale => {
+        air.start({ pathLength: [0, 1], opacity: [1, 0], transition: { duration: .35 } });
+        await Promise.all([handle.start({ y: 8, transition: { duration: .22, ease: 'easeIn' } }), bell.start({ scale, transition: { type: 'spring', stiffness: 420, damping: 9 } })]);
+        if (off) return;
+        await handle.start({ y: 0, transition: { duration: .2, ease: 'easeOut' } });
+      };
+      await stroke(1.1); if (off) return;
+      await stroke(1.22); if (off) return;
+      spark.start({ opacity: [0, 1, 0], scale: [.4, 1.15, 1], transition: { duration: .6 } });
+      await bell.start({ scale: 1, transition: { type: 'spring', stiffness: 260, damping: 12 } });
     })();
     return () => { off = true; };
   }, [play]);
+  const ink = { fill: 'var(--ink)' };
   return (
-    <svg width={size} height={size * 48 / 72} viewBox="0 0 72 48" aria-hidden="true">
+    <svg width={size} height={size * 48 / 72} viewBox="0 0 72 48" aria-hidden="true" style={{ overflow: 'visible' }}>
       <defs>
-        <radialGradient id={gid} cx="35%" cy="30%" r="80%"><stop offset="0" style={{ stopColor: 'var(--brand2)' }} /><stop offset="1" style={{ stopColor: 'var(--brand)' }} /></radialGradient>
+        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1"><stop offset="0" style={{ stopColor: 'var(--brand2)' }} /><stop offset="1" style={{ stopColor: 'var(--brand)' }} /></linearGradient>
       </defs>
-      <g transform="translate(39 22) rotate(30)">
-        <motion.g animate={syr} initial={{ x: -9 }}>
-          <rect x="-8.5" y="-0.6" width="8.5" height="1.2" rx=".6" style={{ fill: 'var(--muted)' }} />
-          <rect x="-24" y="-4" width="16" height="8" rx="1.6" style={{ fill: 'var(--ink)' }} opacity=".92" />
-          <motion.rect x="-22.5" y="-2.6" width="13" height="5.2" rx="1" style={{ originX: 1, fill: 'var(--mint)' }} animate={liq} initial={{ scaleX: 1 }} />
-          <path d="M-20 -4v2M-16.5 -4v2M-13 -4v2" style={{ stroke: 'var(--bg)' }} strokeWidth=".8" />
-          <rect x="-25.2" y="-5.6" width="1.6" height="11.2" rx=".8" style={{ fill: 'var(--ink)' }} />
-          <motion.g animate={rod} initial={{ x: 0 }}>
-            <rect x="-33" y="-1" width="9.5" height="2" style={{ fill: 'var(--ink)' }} />
-            <rect x="-34" y="-4.4" width="1.8" height="8.8" rx=".9" style={{ fill: 'var(--ink)' }} />
-          </motion.g>
-        </motion.g>
-      </g>
-      <motion.g animate={butt} initial={{ scale: 1 }} style={{ originX: 0.5, originY: 0.5 }}>
-        <ellipse cx="44" cy="31" rx="12" ry="13" fill={`url(#${gid})`} />
-        <ellipse cx="58" cy="31" rx="12" ry="13" fill={`url(#${gid})`} />
-        <path d="M51 21.5c-1.5 5-1.6 13.5.2 20.5" style={{ stroke: 'color-mix(in srgb, var(--brand) 55%, #000)' }} strokeWidth="1.6" fill="none" strokeLinecap="round" />
-        <ellipse cx="40" cy="25" rx="3.6" ry="2.2" fill="#fff" opacity=".35" transform="rotate(-30 40 25)" />
-        <ellipse cx="62" cy="25" rx="3.2" ry="2" fill="#fff" opacity=".25" transform="rotate(25 62 25)" />
+      {/* wąż */}
+      <path d="M15.5 39 C 24 47, 30 42, 33.5 33" fill="none" style={{ stroke: 'var(--mint)' }} strokeWidth="2" strokeLinecap="round" />
+      <motion.path d="M17 40 C 24 46, 29 42, 32 35" fill="none" style={{ stroke: '#fff' }} strokeWidth="1" strokeLinecap="round" initial={{ pathLength: 0, opacity: 0 }} animate={air} />
+      {/* pompka */}
+      <motion.g animate={handle} initial={{ y: 0 }}>
+        <rect x="11" y="7" width="2" height="14" rx="1" style={{ fill: 'var(--muted)' }} />
+        <rect x="3.5" y="3.5" width="17" height="4.5" rx="2.25" fill={`url(#${gid})`} />
+      </motion.g>
+      <rect x="7.5" y="19" width="9" height="24" rx="2.5" style={ink} />
+      <rect x="9.5" y="24" width="5" height="1.6" rx=".8" style={{ fill: 'var(--bg)' }} opacity=".7" />
+      <rect x="9.5" y="28" width="5" height="1.6" rx=".8" style={{ fill: 'var(--bg)' }} opacity=".7" />
+      <rect x="2.5" y="42" width="19" height="3.5" rx="1.75" style={ink} />
+      {/* hantel */}
+      <motion.g animate={bell} initial={{ scale: 1 }} style={{ originX: 0.5, originY: 0.5 }}>
+        <rect x="33" y="24.5" width="37" height="3" rx="1.5" style={ink} />
+        <rect x="33.5" y="18.5" width="5" height="15" rx="2" fill={`url(#${gid})`} />
+        <rect x="38.5" y="14.5" width="6" height="23" rx="2.5" fill={`url(#${gid})`} />
+        <rect x="59.5" y="14.5" width="6" height="23" rx="2.5" fill={`url(#${gid})`} />
+        <rect x="65.5" y="18.5" width="5" height="15" rx="2" fill={`url(#${gid})`} />
+        <rect x="40" y="16.5" width="1.6" height="9" rx=".8" fill="#fff" opacity=".45" />
+        <rect x="61" y="16.5" width="1.6" height="9" rx=".8" fill="#fff" opacity=".45" />
+      </motion.g>
+      {/* błysk */}
+      <motion.g animate={spark} initial={{ opacity: 0 }} style={{ originX: 0.5, originY: 0.5 }}>
+        <path d="M52 6v5M52 2.5v.01M45 8.5l2.5 3M59 8.5l-2.5 3" style={{ stroke: 'var(--gold)' }} strokeWidth="2" strokeLinecap="round" fill="none" />
       </motion.g>
     </svg>
   );

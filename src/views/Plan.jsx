@@ -27,7 +27,7 @@ export function AiPlanSheet({ p, onApply, close }) {
       <p className="small muted">AI zna Twoją ankietę, kontuzje i historię. Wybiera tylko z ćwiczeń dozwolonych dla Ciebie – każde jest sprawdzane przed zapisem.</p>
       <label className="f">Życzenia (opcjonalnie)<textarea id="wish" value={wish} onChange={e => setWish(e.target.value)} placeholder="np. chcę mocniej klatkę i ręce, nie lubię wykroków, mam 45 minut" /></label>
       <button className="btn pri big" onClick={go} disabled={busy}>{busy ? <><span className="typing"><span /><span /><span /></span>AI układa plan…</> : <><Sparkles size={18} />Ułóż plan</>}</button>
-      {err === 'offline' && <div className="banner info"><div><b>Trener AI jest wyłączony</b>Na Netlify włączysz go kluczem Claude API (instrukcja w README). Teraz mogę ułożyć plan algorytmem.</div><button className="btn sm" onClick={local}>Ułóż algorytmem</button></div>}
+      {err === 'offline' && <div className="banner info"><div><b>Trener AI jest wyłączony</b>Na Netlify włączysz go kluczem GEMINI_API_KEY (instrukcja w README). Teraz mogę ułożyć plan algorytmem.</div><button className="btn sm" onClick={local}>Ułóż algorytmem</button></div>}
       {err && err !== 'offline' && <div className="banner bad"><div>{err}</div></div>}
       <AnimatePresence>{res && <motion.div className="card stack" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
         <h3>{res.name}</h3><p className="small">{res.basis}</p>

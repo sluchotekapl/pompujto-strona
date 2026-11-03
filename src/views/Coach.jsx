@@ -25,7 +25,7 @@ export default function Coach() {
       const a = await coachReply(p, hist, t => setLive(t));
       update(x => { x.coach = hist.concat({ role: 'assistant', content: a }).slice(-40); });
     } catch (e) {
-      if (e.code === 'offline') { setOff(true); update(x => { x.coach = hist.concat({ role: 'assistant', content: 'Trener AI jest teraz wyłączony. Po podłączeniu klucza Claude API (instrukcja w README) odpowiem na każde pytanie o trening i dietę.' }); }); }
+      if (e.code === 'offline') { setOff(true); update(x => { x.coach = hist.concat({ role: 'assistant', content: 'Trener AI jest teraz wyłączony. Po dodaniu klucza GEMINI_API_KEY na Netlify odpowiem na każde pytanie o trening i dietę.' }); }); }
       else { update(x => { x.coach = msgs; }); setTxt(q); toast(e.message); }
     }
     setLive(''); setBusy(false);
@@ -56,7 +56,7 @@ export default function Coach() {
             <li>Układa plan pod Twoje życzenia, sprawdzając każde ćwiczenie pod kątem kontuzji.</li>
             <li>Komentuje każdy zapisany trening.</li>
             <li>Odpowiada na pytania o technikę, dietę i regenerację.</li></ul>
-            {off && <p className="xs muted">Teraz wyłączony – włączysz go kluczem Claude API na Netlify.</p>}
+            {off && <p className="xs muted">Teraz wyłączony – włączysz go kluczem GEMINI_API_KEY na Netlify.</p>}
             <p className="xs muted">Nie zastępuje lekarza. Przy ostrym bólu, bólu w klatce lub zawrotach głowy – przerwij i skonsultuj się ze specjalistą.</p></div>
         </div>
       </div>

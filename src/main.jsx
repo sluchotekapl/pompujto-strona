@@ -4,5 +4,8 @@ import './lib/engine.js';
 import './styles.css';
 import { createRoot } from 'react-dom/client';
 import App from './App.jsx';
+import { setupPWA } from './lib/pwa.js';
+
+setupPWA();
 
 createRoot(document.getElementById('root')).render(<App />);

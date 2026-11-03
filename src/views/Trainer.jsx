@@ -9,6 +9,9 @@ import { clientStats, alertsFor, liftProgress, blankProgram, toEditable, planTex
 import { AiPlanSheet } from './Plan.jsx';
 import { SurveyForm } from './Profile.jsx';
 import { LineChart } from './Rewards.jsx';
+import { ProgressBody } from './Progress.jsx';
+import { inviteLink } from './Account.jsx';
+import { PRICES } from '../lib/backend.js';
 const PJ = () => window.PJ;
 const GOALS = { redukcja: 'redukcja', zdrowie: 'zdrowie', masa: 'masa', sila: 'siła' };
 const LVL = { beginner: 'początkujący', intermediate: 'średni', advanced: 'zaawansowany' };
@@ -21,7 +24,7 @@ function useCoach() {
   useEffect(() => { if (!ctx.users) ctx.reloadClients(); }, []);
   return ctx;
 }
-const isMine = (c, me) => c.offline || c.coach_id === me.id || c.coach_id == null;
+const isMine = (c, me) => c.offline || c.coach_id === me.id || (me.role === 'admin' && c.coach_id == null && c.role === 'user');
 
 /* ---------- przypisanie planu podopiecznemu ---------- */
 async function assignPlan(ctx, client, program, toast) {
@@ -79,17 +82,22 @@ export function SendSheet({ users, close, onSent, preset }) {
 /* ---------- zaproszenie / dodanie podopiecznego ---------- */
 function InviteBox() {
   const { toast } = useUI();
+  const { me, isAdmin } = useApp();
   const [invite, setInvite] = useState('');
-  useEffect(() => { api.getInvite().then(setInvite).catch(() => { }); }, []);
-  const link = location.origin + location.pathname.replace(/index\.html$/, '');
-  const txt = `Hej! Zapraszam Cię do pompujto.pl – będę Twoim trenerem. Dostaniesz plan treningowy na każdy dzień, dietę i nagrody za sumienny tydzień.\nWejdź: ${link}\nZałóż konto${invite ? ` i wpisz kod zaproszenia: ${invite}` : ''}.`;
+  useEffect(() => { if (isAdmin) api.getInvite().then(setInvite).catch(() => { }); }, []);
+  const code = me.trainer_code;
+  const link = code ? inviteLink(code) : location.origin + location.pathname.replace(/index\.html$/, '');
+  const txt = `Hej! Zapraszam Cię do pompujto.pl – będę Twoim trenerem. Dostaniesz plan treningowy na każdy dzień, dietę i nagrody za sumienny tydzień. Dla Ciebie za darmo.\nWejdź i załóż konto: ${link}${code ? `\n(kod trenera: ${code})` : ''}`;
   return (
     <div className="stack">
-      <p className="small muted">Wyślij to na Messengerze, WhatsAppie albo SMS‑em. Po rejestracji osoba sama pojawi się na Twojej liście. Kod blokuje rejestrację obcym (puste = otwarta).</p>
-      <div className="row"><input id="inv" type="text" value={invite} onChange={e => setInvite(e.target.value)} placeholder="Kod, np. POMPA2026" style={{ flex: 1, minWidth: 150 }} aria-label="Kod zaproszenia" />
-        <button className="btn" onClick={() => api.setInvite(invite.trim()).then(() => toast('Zapisano kod'), e => toast(e.message))}>Zapisz kod</button></div>
+      <p className="small muted">Wyślij to na Messengerze, WhatsAppie albo SMS‑em. Po rejestracji z Twoim kodem osoba sama pojawi się na Twojej liście i korzysta za darmo.</p>
+      {code ? <div className="codebox num">{code}</div> : <div className="banner bad"><div className="small">Brak kodu trenera – administrator musi uruchomić aktualizację bazy nr 3.</div></div>}
       <textarea id="invtxt" readOnly value={txt} onFocus={e => e.target.select()} />
       <button className="btn pri" onClick={() => copyText(txt, toast)}><Copy size={16} />Kopiuj zaproszenie</button>
+      {isAdmin && <details className="stack"><summary className="small" style={{ cursor: 'pointer', fontWeight: 700 }}>Administrator: kod zamykający rejestrację</summary>
+        <p className="xs muted">Gdy ustawisz kod, bez niego (albo bez kodu trenera) nikt się nie zarejestruje. Puste = rejestracja otwarta – zalecane przy sprzedaży abonamentów.</p>
+        <div className="row"><input id="inv" type="text" value={invite} onChange={e => setInvite(e.target.value)} placeholder="puste = otwarta" style={{ flex: 1, minWidth: 150 }} aria-label="Kod zaproszenia" />
+          <button className="btn" onClick={() => api.setInvite(invite.trim()).then(() => toast('Zapisano kod'), e => toast(e.message))}>Zapisz</button></div></details>}
     </div>
   );
 }
@@ -138,7 +146,7 @@ function ClientCard({ c }) {
     <motion.a href={'#p-' + c.id} className="card client" whileHover={{ y: -3 }} style={{ textDecoration: 'none', color: 'var(--ink)' }}>
       <div className="row" style={{ flexWrap: 'nowrap' }}><span className="av lg">{initials(c.name)}</span>
         <div style={{ minWidth: 0, flex: 1 }}><b>{c.name}</b><div className="xs muted" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.offline ? 'bez konta' : c.email} · poz. {s.lv.n}</div></div>
-        {c.role === 'admin' && <span className="tag pink">trener</span>}</div>
+        {c.role !== 'user' && <span className="tag pink">{c.role === 'admin' ? 'admin' : 'trener'}</span>}</div>
       <div className="stack" style={{ gap: 4 }}><div className="spread xs"><span>Ten tydzień</span><span className="num">{s.st.tr}/{s.st.need} tren. · {s.st.diet}/5 diety</span></div><Bar value={s.st.tr} max={s.st.need} tone={s.st.ok ? 'gold' : ''} /></div>
       <div className="spread xs muted"><span>{s.last ? 'Ostatni trening: ' + fmtDate(s.last.date) : 'Brak treningów'}</span><span className="num">{comma(c.data.weight)} kg{s.dw ? ` (${s.dw > 0 ? '+' : ''}${comma(s.dw)})` : ''}</span></div>
       {al.length > 0 && <div className="chips">{al.slice(0, 2).map(a => <span key={a.k} className={'tag ' + a.tone} style={{ whiteSpace: 'normal' }}>{a.t.length > 46 ? a.t.slice(0, 44) + '…' : a.t}</span>)}</div>}
@@ -193,11 +201,11 @@ export function Clients() {
   const chosen = list.filter(c => picked.includes(c.id));
   return (
     <Page>
-      <div className="spread"><div><p className="eyebrow">Panel trenera</p><h1>Podopieczni</h1></div>
+      <div className="spread"><div><p className="eyebrow">Panel trenera</p><h1>Podopieczni</h1><span className={'tag ' + (ctx.clients.filter(c => !c.offline && c.coach_id === ctx.me.id).length > PRICES.trainerSeats ? 'gold' : '')}>Z kontem: {ctx.clients.filter(c => !c.offline && c.coach_id === ctx.me.id).length}/{PRICES.trainerSeats} w abonamencie</span></div>
         <div className="row"><button className="btn" onClick={() => { setSel(!sel); setPicked([]); }}>{sel ? 'Anuluj zaznaczanie' : 'Zaznacz kilka'}</button><button className="btn pri" onClick={() => modal(c => <AddClientSheet close={c} />)}><UserPlus size={16} />Dodaj</button></div></div>
       <div className="card stack">
         <div style={{ position: 'relative' }}><Search size={18} style={{ position: 'absolute', left: 12, top: 12, color: 'var(--muted)' }} /><input id="cq" type="search" value={q} onChange={e => setQ(e.target.value)} placeholder="Szukaj po imieniu lub e‑mailu" style={{ paddingLeft: 40 }} aria-label="Szukaj podopiecznego" /></div>
-        <div className="spread"><Seg id="scope" value={scope} onChange={setScope} options={[['mine', 'Moi'], ['all', 'Wszyscy w bazie']]} />
+        <div className="spread">{ctx.isAdmin ? <Seg id="scope" value={scope} onChange={setScope} options={[['mine', 'Moi'], ['all', 'Wszyscy w bazie']]} /> : <span />}
           {sel && <div className="row"><button className="btn sm pri" disabled={!chosen.length} onClick={() => modal(c => <SendSheet users={chosen} close={c} />)}><Send size={14} />Wiadomość ({chosen.length})</button><button className="btn sm gold" disabled={!chosen.length} onClick={() => modal(c => <SendSheet users={chosen} preset="reward" close={c} />)}><Gift size={14} />Nagroda</button></div>}</div>
       </div>
       {!list.length && <div className="card empty"><Users size={32} /><span>Brak osób. Dodaj pierwszego podopiecznego.</span></div>}
@@ -236,7 +244,7 @@ export function ClientDetail() {
   const assign = pr => assignPlan(ctx, c, pr, toast).then(ok => ok && ctx.reloadClients());
   const library = ctx.data.coachPlans || [];
   const fromLibrary = () => modal(close => <div className="stack"><h2>Plan z biblioteki</h2>{library.length ? library.map(pl => <button key={pl.id} className="treat" onClick={() => { close(); assign(pl); }}><span className="treat-ic"><NotebookPen size={18} /></span><span><b>{pl.name}</b><span className="xs muted">{pl.days.length} dni · {pl.days.reduce((t, x) => t + x.slots.length, 0)} ćwiczeń</span></span></button>) : <p className="muted">Biblioteka jest pusta. Utwórz plan w zakładce Plany.</p>}</div>);
-  const tabs = [['przeglad', 'Przegląd'], ['plan', 'Plan'], ['historia', 'Historia'], ['ankieta', 'Ankieta'], ['notatki', 'Notatki']];
+  const tabs = [['przeglad', 'Przegląd'], ['plan', 'Plan'], ['postepy', 'Postępy'], ['historia', 'Historia'], ['ankieta', 'Ankieta'], ['notatki', 'Notatki']];
   return (
     <Page>
       <a href="#podopieczni" className="btn ghost sm" style={{ justifySelf: 'start' }}><ChevronLeft size={16} />Podopieczni</a>
@@ -317,6 +325,8 @@ export function ClientDetail() {
         }} />
       </div>}
 
+      {tab === 'postepy' && <ProgressBody d={d} />}
+
       {tab === 'notatki' && <div className="cols">
         <div className="card stack"><h3>Prywatne notatki</h3><p className="xs muted">Widzisz je tylko Ty.</p>
           <textarea id="cnotes" value={notes} onChange={e => setNotes(e.target.value)} style={{ minHeight: 180, fontFamily: 'var(--body)' }} placeholder="np. lewy bark – unikać wyciskania nad głowę, cel: 10 kg w 3 miesiące" />
@@ -325,8 +335,10 @@ export function ClientDetail() {
           <textarea id="cpub" value={pub} onChange={e => setPub(e.target.value)} style={{ fontFamily: 'var(--body)' }} placeholder="np. W tym tygodniu skup się na technice przysiadu, ciężar bez zmian." />
           <div className="row"><button className="btn pri" onClick={() => ctx.saveClient(c, { note: pub.trim() }).then(() => toast('Uwaga wysłana'), e => toast(e.message))}><Send size={16} />Ustaw</button>{pub && <button className="btn" onClick={() => { setPub(''); ctx.saveClient(c, { note: '' }).then(() => toast('Usunięto'), e => toast(e.message)); }}>Usuń uwagę</button>}</div></div>}
         <div className="card stack"><h3>Zarządzanie</h3>
-          {!c.offline && c.coach_id !== ctx.me.id && <button className="btn" onClick={() => api.assign(c.id, ctx.me.id).then(() => { toast('Przypisano do Ciebie'); ctx.reloadClients(); }, e => toast(e.message))}><UserPlus size={16} />Przypisz do mnie</button>}
-          {!c.offline && <button className="btn" onClick={() => api.setRole(c.id, c.role === 'admin' ? 'user' : 'admin').then(() => { toast('Zmieniono rolę'); ctx.reloadClients(); }, e => toast(e.message))}><Shield size={16} />{c.role === 'admin' ? 'Odbierz rolę trenera' : 'Nadaj rolę trenera'}</button>}
+          {!c.offline && ctx.isAdmin && c.coach_id !== ctx.me.id && <button className="btn" onClick={() => api.assign(c.id, ctx.me.id).then(() => { toast('Przypisano do Ciebie'); ctx.reloadClients(); }, e => toast(e.message))}><UserPlus size={16} />Przypisz do mnie</button>}
+          {!c.offline && c.coach_id === ctx.me.id && <button className="btn" onClick={() => modal(cl => <div className="stack"><h2>Odłączyć {c.name}?</h2><p className="small">Osoba zachowa konto i dane, ale zniknie z Twojej listy. Plan zostaje u niej.</p><div className="row"><button className="btn danger" onClick={() => { cl(); api.assign(c.id, null).then(() => { toast('Odłączono'); ctx.reloadClients(); location.hash = '#podopieczni'; }, e => toast(e.message)); }}>Odłącz</button><button className="btn" onClick={cl}>Anuluj</button></div></div>)}><Users size={16} />Odłącz od siebie</button>}
+          {!c.offline && ctx.isAdmin && <label className="f">Rola (administrator)<select id="c-role" value={c.role} onChange={e => api.setRole(c.id, e.target.value).then(() => { toast('Zmieniono rolę'); ctx.reloadClients(); }, er => toast(er.message))}><option value="user">Użytkownik</option><option value="trainer">Trener</option><option value="admin">Administrator</option></select></label>}
+          {!c.offline && ctx.isAdmin && <label className="check"><input id="c-comp" type="checkbox" checked={!!(c.billing || {}).comp} onChange={e => api.setBilling(c.id, { comp: e.target.checked }).then(() => { toast(e.target.checked ? 'Darmowy dostęp włączony' : 'Darmowy dostęp wyłączony'); ctx.reloadClients(); }, er => toast(er.message))} />Darmowy dostęp (bez abonamentu)</label>}
           {c.offline && <button className="btn danger" onClick={() => modal(cl => <div className="stack"><h2>Usunąć {c.name}?</h2><p>Znikną plan, pomiary i notatki tej osoby.</p><div className="row"><button className="btn danger" onClick={() => { ctx.update(x => { x.clients = (x.clients || []).filter(k => k.id !== c.id); }); cl(); location.hash = '#podopieczni'; }}>Usuń</button><button className="btn" onClick={cl}>Anuluj</button></div></div>)}><Trash2 size={16} />Usuń podopiecznego</button>}
         </div>
       </div>}

@@ -24,6 +24,29 @@ export function normalize(d, id, name) {
   return d;
 }
 
+/* ---------------- abonament i dostęp ---------------- */
+// Ceny i zasady: konto „dla siebie” 20 zł/mies. (7 dni za darmo), konto trenera 79 zł/mies. z 15 podopiecznymi w cenie,
+// podopieczni trenera korzystają za darmo. Dopóki nie podłączymy płatności (PJ_CONFIG.paywall !== true), nic nie jest blokowane.
+export const PRICES = { user: 20, trainer: 79, trainerSeats: 15, extraSeat: 5, trialDays: 7 };
+export const isTrainer = me => !!me && (me.role === 'admin' || me.role === 'trainer');
+export function access(me) {
+  const now = Date.now(), b = (me && me.billing) || {};
+  const created = new Date((me && me.created_at) || now).getTime();
+  const trialEnd = created + PRICES.trialDays * 864e5;
+  const until = b.until ? new Date(b.until).getTime() : 0;
+  const enforce = !!(window.PJ_CONFIG && window.PJ_CONFIG.paywall);
+  let state;
+  if (me && me.role === 'admin') state = 'owner';
+  else if (b.comp) state = 'comp';
+  else if (b.status === 'active' && (!until || until > now)) state = 'active';
+  else if (!isTrainer(me) && me && me.coach_id) state = 'covered';
+  else if (now < trialEnd) state = 'trial';
+  else state = 'expired';
+  const daysLeft = Math.max(0, Math.ceil(((state === 'active' && until ? until : trialEnd) - now) / 864e5));
+  return { state, daysLeft, ok: !enforce || state !== 'expired', enforce, plan: isTrainer(me) ? 'trainer' : 'user' };
+}
+const code6 = () => Math.random().toString(36).slice(2, 8).toUpperCase().padEnd(6, 'X');
+
 /* ---------------- tryb lokalny ---------------- */
 const LKEY = 'pompujto:local:v2';
 let mem = null;
@@ -54,7 +77,7 @@ async function ldb() {
       weights: [{ date: new Date().toISOString(), kg: 85, xp: 0 }], rewards: Object.assign(blankData().rewards, { goal: 'pizza' })
     }), 'trener', 'Trener Demo');
     k.program = PJ().buildProgram(k, []);
-    db.users.trener = { id: 'trener', email: 'trener', name: 'Trener Demo', role: 'admin', pass, data: k, created_at: new Date().toISOString() };
+    db.users.trener = { id: 'trener', email: 'trener', name: 'Trener Demo', role: 'admin', kind: 'trainer', trainer_code: 'DEMO01', billing: {}, pass, data: k, created_at: new Date().toISOString() };
   }
   db.session = Object.keys(db.users)[0];
   lwrite(db);
@@ -62,21 +85,30 @@ async function ldb() {
 }
 
 const local = {
-  async session() { const db = await ldb(); const u = db.session && db.users[db.session]; return u ? { id: u.id, email: u.email, name: u.name, role: u.role } : null; },
+  async session() {
+    const db = await ldb(); const u = db.session && db.users[db.session];
+    if (!u) return null;
+    const head = Object.values(db.users).find(x => x.role === 'admin');
+    if (u.role === 'admin' && !u.trainer_code) { u.trainer_code = code6(); lwrite(db); }
+    const coach_id = u.coach_id !== undefined ? u.coach_id : (u.role === 'user' && head ? head.id : null);
+    return { id: u.id, email: u.email, name: u.name, role: u.role, kind: u.kind || (u.role === 'user' ? 'user' : 'trainer'), trainer_code: u.trainer_code || null, billing: u.billing || {}, coach_id, created_at: u.created_at, consents: u.consents || {} };
+  },
   async signIn(email, password) {
     const db = await ldb(), h = await hash(password), e = email.trim().toLowerCase();
     const u = Object.values(db.users).find(x => x.email.toLowerCase() === e);
     if (!u || u.pass !== h) throw new Error('Zły login lub hasło.');
     db.session = u.id; lwrite(db); return this.session();
   },
-  async signUp({ name, email, password, invite }) {
+  async signUp({ name, email, password, invite, kind, consents }) {
     const db = await ldb(), e = email.trim().toLowerCase();
     if (Object.values(db.users).some(x => x.email.toLowerCase() === e)) throw new Error('Takie konto już istnieje. Zaloguj się.');
     const hasAdmin = Object.values(db.users).some(u => u.role === 'admin');
-    if (hasAdmin && db.settings.invite_code && invite !== db.settings.invite_code) throw new Error('Nieprawidłowy kod zaproszenia.');
-    const id = uid();
-    const head = Object.values(db.users).find(u => u.role === 'admin');
-    db.users[id] = { id, coach_id: head ? head.id : null, coach: {}, email: email.trim(), name: name.trim(), role: hasAdmin ? 'user' : 'admin', pass: await hash(password), data: normalize(blankData(), id, name.trim()), created_at: new Date().toISOString() };
+    const inv = (invite || '').trim().toUpperCase();
+    const tr = inv && Object.values(db.users).find(u => (u.trainer_code || '') === inv && u.role !== 'user');
+    if (hasAdmin && !tr && db.settings.invite_code && inv !== db.settings.invite_code.toUpperCase()) throw new Error('Nieprawidłowy kod zaproszenia lub kod trenera.');
+    const id = uid(), k = kind === 'trainer' ? 'trainer' : 'user';
+    const role = !hasAdmin ? 'admin' : k === 'trainer' ? 'trainer' : 'user';
+    db.users[id] = { id, coach_id: tr ? tr.id : null, coach: {}, email: email.trim(), name: name.trim(), role, kind: role === 'user' ? 'user' : 'trainer', trainer_code: role === 'user' ? null : code6(), billing: {}, consents: consents || {}, pass: await hash(password), data: normalize(blankData(), id, name.trim()), created_at: new Date().toISOString() };
     db.users[id].data.program = PJ().buildProgram(db.users[id].data, []);
     db.session = id; lwrite(db); return this.session();
   },
@@ -84,10 +116,19 @@ const local = {
   async load() { const db = await ldb(), u = db.users[db.session]; const d = normalize(u.data, u.id, u.name); d._coach = u.coach || {}; return d; },
   async save(data) { const db = await ldb(), u = db.users[db.session]; if (!u) return; const d = Object.assign({}, data); delete d._coach; u.data = d; u.name = data.name || u.name; lwrite(db); },
   async myCoach() { const db = await ldb(), u = db.users[db.session]; return (u && u.coach) || {}; },
-  async coachSet(uid, patch) { const db = await ldb(); if (db.users[db.session].role !== 'admin') throw new Error('Tylko trener'); const u = db.users[uid]; u.coach = Object.assign({}, u.coach || {}, patch); lwrite(db); },
-  async assign(uid, cid) { const db = await ldb(); db.users[uid].coach_id = cid; lwrite(db); },
-  async listUsers() { const db = await ldb(); const head = Object.values(db.users).find(u => u.role === 'admin'); return Object.values(db.users).map(u => ({ id: u.id, email: u.email, name: u.name, role: u.role, created_at: u.created_at, coach: u.coach || {}, coach_id: u.coach_id !== undefined ? u.coach_id : (u.role === 'user' && head ? head.id : null), data: normalize(u.data, u.id, u.name) })); },
-  async setRole(id, role) { const db = await ldb(); if (id === db.session && role === 'user') throw new Error('Nie możesz odebrać roli sobie.'); db.users[id].role = role; lwrite(db); },
+  async coachSet(uid, patch) { const db = await ldb(), me = db.users[db.session], u = db.users[uid]; if (!(me.role === 'admin' || (me.role === 'trainer' && u.coach_id === me.id))) throw new Error('To nie jest Twój podopieczny'); u.coach = Object.assign({}, u.coach || {}, patch); lwrite(db); },
+  async assign(uid, cid) { const db = await ldb(), me = db.users[db.session]; if (me.role !== 'admin' && !(cid === null && db.users[uid].coach_id === me.id)) throw new Error('Brak uprawnień'); db.users[uid].coach_id = cid; lwrite(db); },
+  async listUsers() {
+    const db = await ldb(), me = db.users[db.session]; const head = Object.values(db.users).find(u => u.role === 'admin');
+    return Object.values(db.users).map(u => ({ id: u.id, email: u.email, name: u.name, role: u.role, kind: u.kind || (u.role === 'user' ? 'user' : 'trainer'), billing: u.billing || {}, created_at: u.created_at, coach: u.coach || {}, coach_id: u.coach_id !== undefined ? u.coach_id : (u.role === 'user' && head ? head.id : null), data: normalize(u.data, u.id, u.name) }))
+      .filter(u => me.role === 'admin' || u.id === me.id || u.coach_id === me.id);
+  },
+  async setRole(id, role) { const db = await ldb(); if (db.users[db.session].role !== 'admin') throw new Error('Tylko administrator'); if (id === db.session && role !== 'admin') throw new Error('Nie możesz odebrać roli sobie.'); const u = db.users[id]; u.role = role; if (role !== 'user') { u.kind = 'trainer'; u.trainer_code = u.trainer_code || code6(); } lwrite(db); },
+  async setBilling(id, b) { const db = await ldb(); if (db.users[db.session].role !== 'admin') throw new Error('Tylko administrator'); const u = db.users[id]; u.billing = Object.assign({}, u.billing || {}, b); lwrite(db); },
+  async joinCoach(code) { const db = await ldb(), c = (code || '').trim().toUpperCase(); const t = Object.values(db.users).find(u => u.trainer_code === c && u.role !== 'user'); if (!t) throw new Error('Nie ma trenera z takim kodem'); if (t.id === db.session) throw new Error('To Twój własny kod'); db.users[db.session].coach_id = t.id; lwrite(db); return t.name; },
+  async leaveCoach() { const db = await ldb(); db.users[db.session].coach_id = null; lwrite(db); },
+  async contacts() { const db = await ldb(), me = db.users[db.session]; const head = Object.values(db.users).find(u => u.role === 'admin'); const cid = me.coach_id !== undefined ? me.coach_id : (me.role === 'user' && head ? head.id : null); return Object.values(db.users).filter(u => u.id !== me.id && (u.role === 'admin' || u.id === cid)).map(u => ({ id: u.id, name: u.name, role: u.role })); },
+  async deleteMe() { const db = await ldb(); if (db.users[db.session].role === 'admin' && Object.values(db.users).filter(u => u.role === 'admin').length < 2) throw new Error('Jesteś jedynym administratorem – najpierw nadaj tę rolę komuś innemu.'); delete db.users[db.session]; db.messages = db.messages.filter(m => m.from_id !== db.session && m.to_id !== db.session); db.session = null; lwrite(db); },
   async send(toIds, msg) {
     const db = await ldb();
     toIds.forEach(to => db.messages.push({ id: db.seq++, from_id: db.session, to_id: to, type: msg.type || 'text', title: msg.title || '', body: msg.body || '', payload: msg.payload || null, read: false, done: false, created_at: new Date().toISOString() }));
@@ -105,19 +146,22 @@ const local = {
 /* ---------------- Supabase ---------------- */
 let sbp = null;
 function sb() { if (!sbp) sbp = import('@supabase/supabase-js').then(m => m.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, { auth: { persistSession: true, autoRefreshToken: true } })); return sbp; }
+const need3 = e => { if (e && /function|schema cache/i.test(e.message)) throw new Error('Brakuje aktualizacji bazy: uruchom w Supabase plik aktualizacja-3-dwie-wersje.sql.'); err(e); };
 const err = e => { if (e) throw new Error(e.message === 'Invalid login credentials' ? 'Zły e‑mail lub hasło.' : e.message); };
 const cloud = {
   async session() {
     const c = await sb(); const { data } = await c.auth.getSession(); const u = data.session && data.session.user;
     if (!u) return null;
-    const { data: p, error } = await c.from('profiles').select('id,email,name,role').eq('id', u.id).single(); err(error);
+    let { data: p, error } = await c.from('profiles').select('id,email,name,role,kind,trainer_code,billing,coach_id,created_at,consents').eq('id', u.id).single();
+    if (error && /column|kind|billing|trainer_code|consents/i.test(error.message)) { ({ data: p, error } = await c.from('profiles').select('id,email,name,role,created_at').eq('id', u.id).single()); if (p) p.legacy = true; }
+    err(error);
     return p;
   },
   async signIn(email, password) { const c = await sb(); const { error } = await c.auth.signInWithPassword({ email: email.trim(), password }); err(error); return this.session(); },
-  async signUp({ name, email, password, invite }) {
+  async signUp({ name, email, password, invite, kind, consents }) {
     const c = await sb();
-    const { data, error } = await c.auth.signUp({ email: email.trim(), password, options: { data: { name: name.trim(), invite: invite || '' }, emailRedirectTo: location.origin } });
-    if (error && /Database error/i.test(error.message)) throw new Error('Nieprawidłowy kod zaproszenia.');
+    const { data, error } = await c.auth.signUp({ email: email.trim(), password, options: { data: { name: name.trim(), invite: (invite || '').trim(), kind: kind === 'trainer' ? 'trainer' : 'user', consents: consents || {} }, emailRedirectTo: location.origin + location.pathname } });
+    if (error && /Database error/i.test(error.message)) throw new Error('Nieprawidłowy kod zaproszenia lub kod trenera.');
     err(error);
     if (!data.session) return { pendingEmail: true };
     return this.session();
@@ -143,6 +187,11 @@ const cloud = {
   async sent() { const c = await sb(); const { data: s } = await c.auth.getSession(); const { data, error } = await c.from('messages').select('*').eq('from_id', s.session.user.id).order('created_at', { ascending: false }).limit(100); err(error); return data; },
   async mark(id, patch) { const c = await sb(); const { error } = await c.from('messages').update(patch).eq('id', id); err(error); },
   async admins() { const c = await sb(); const { data, error } = await c.from('profiles').select('id,name').eq('role', 'admin'); err(error); return data; },
+  async contacts() { const c = await sb(); const { data, error } = await c.rpc('my_contacts'); if (error) return this.admins(); return data; },
+  async setBilling(uid, b) { const c = await sb(); const { error } = await c.rpc('set_billing', { uid, b }); need3(error); },
+  async joinCoach(code) { const c = await sb(); const { data, error } = await c.rpc('join_coach', { code }); need3(error); return data; },
+  async leaveCoach() { const c = await sb(); const { data: s } = await c.auth.getSession(); const { error } = await c.rpc('coach_assign', { uid: s.session.user.id, cid: null }); need3(error); },
+  async deleteMe() { const c = await sb(); const { error } = await c.rpc('delete_me'); need3(error); await c.auth.signOut(); },
   async getInvite() { const c = await sb(); const { data } = await c.from('app_settings').select('value').eq('key', 'invite_code').maybeSingle(); return (data && data.value) || ''; },
   async setInvite(v) { const c = await sb(); const { error } = await c.from('app_settings').upsert({ key: 'invite_code', value: v }); err(error); },
   async token() { const c = await sb(); const { data } = await c.auth.getSession(); return data.session ? data.session.access_token : null; }

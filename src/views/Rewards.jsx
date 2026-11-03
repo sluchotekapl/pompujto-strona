@@ -60,12 +60,12 @@ export function RewardCard() {
   );
 }
 
-export function LineChart({ pts }) {
+export function LineChart({ pts, label = 'Masa ciała' }) {
   if (pts.length < 2) return <p className="small muted">Dodaj co najmniej dwa pomiary, żeby zobaczyć wykres.</p>;
   const W = 560, H = 160, pad = 36, ks = pts.map(p => p.kg), lo = Math.floor(Math.min(...ks) - 1), hi = Math.ceil(Math.max(...ks) + 1);
   const x = i => pad + i * (W - pad - 12) / (pts.length - 1), y = v => 10 + (hi - v) / (hi - lo) * (H - 20);
   const d = pts.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.kg).toFixed(1)}`).join('');
-  return <svg className="chart" viewBox={`0 0 ${W} ${H + 20}`} role="img" aria-label="Masa ciała">
+  return <svg className="chart" viewBox={`0 0 ${W} ${H + 20}`} role="img" aria-label={label}>
     {[lo, (lo + hi) / 2, hi].map((v, i) => <g key={i}><line x1={pad} x2={W - 8} y1={y(v)} y2={y(v)} style={{ stroke: 'var(--line)' }} /><text x="0" y={y(v) + 4}>{v}</text></g>)}
     <path d={`${d} L${x(pts.length - 1)},${H - 10} L${x(0)},${H - 10}Z`} style={{ fill: 'var(--pink)' }} fillOpacity=".14" />
     <motion.path d={d} fill="none" style={{ stroke: 'var(--pink)' }} strokeWidth="2.5" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 1.2 }} />

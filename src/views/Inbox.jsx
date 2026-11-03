@@ -9,10 +9,10 @@ const PJ = () => window.PJ;
 const when = d => new Date(d).toLocaleString('pl-PL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
 export default function Inbox() {
-  const { data: p, update, inbox, refreshInbox, isAdmin, me } = useApp();
+  const { data: p, update, inbox, refreshInbox, trainer, me } = useApp();
   const { toast } = useUI();
   const [admins, setAdmins] = useState([]), [txt, setTxt] = useState('');
-  useEffect(() => { refreshInbox(); api.admins().then(a => setAdmins(a.filter(x => x.id !== me.id))).catch(() => { }); }, []);
+  useEffect(() => { refreshInbox(); api.contacts().then(a => { a = a.filter(x => x.id !== me.id); const mine = a.filter(x => x.id === me.coach_id); setAdmins(mine.length ? mine : a.filter(x => x.role === 'admin')); }).catch(() => { }); }, []);
   useEffect(() => { inbox.filter(m => !m.read).forEach(m => api.mark(m.id, { read: true }).catch(() => { })); }, [inbox.length]);
   const accept = async m => {
     if (m.type === 'plan' && m.payload && m.payload.program) { update(x => { x.program = m.payload.program; }); toast('Plan od trenera ustawiony'); }
@@ -21,7 +21,7 @@ export default function Inbox() {
   };
   const sendToCoach = async () => {
     if (!txt.trim() || !admins.length) return;
-    try { await api.send(admins.map(a => a.id), { type: 'text', title: 'Wiadomość od ' + p.name, body: txt.trim() }); setTxt(''); toast('Wysłano do trenera'); } catch (e) { toast(e.message); }
+    try { await api.send(admins.map(a => a.id), { type: 'text', title: 'Wiadomość od ' + p.name, body: txt.trim() }); setTxt(''); toast('Wysłano'); } catch (e) { toast(e.message); }
   };
   const Ic = { text: Mail, plan: Dumbbell, reward: Gift };
   return (
@@ -41,7 +41,7 @@ export default function Inbox() {
               </div>
             </Item>); })}</Stagger>
         </div>
-        {!isAdmin && <div className="card stack"><h3>Napisz do trenera</h3>
+        {!trainer && <div className="card stack"><h3>Napisz do {me.coach_id ? 'trenera' : 'obsługi'}</h3>
           {admins.length ? <><textarea id="to-coach" value={txt} onChange={e => setTxt(e.target.value)} placeholder="np. Boli mnie bark przy wyciskaniu, co zmienić?" /><button className="btn pri" onClick={sendToCoach}><Send size={16} />Wyślij</button></> : <p className="small muted">Brak trenera w systemie.</p>}</div>}
       </div>
     </Page>

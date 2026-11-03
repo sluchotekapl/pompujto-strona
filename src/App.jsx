@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, MotionConfig } from 'framer-motion';
-import { Bell, Dumbbell, CalendarCheck, Sparkles, Apple, Trophy, Library, ClipboardList, LogOut, Mail, SunMoon, LayoutDashboard, Users, NotebookPen, User } from 'lucide-react';
-import { api, MODE, normalize } from './lib/backend.js';
+import { Bell, Dumbbell, CalendarCheck, Sparkles, Apple, Trophy, Library, ClipboardList, LogOut, Mail, SunMoon, LayoutDashboard, Users, NotebookPen, User, TrendingUp, UserCog, CreditCard, FileText, WifiOff } from 'lucide-react';
+import { api, MODE, normalize, isTrainer, access } from './lib/backend.js';
 import { applyCoach } from './lib/coach.js';
 import { Brand } from './components/Logo.jsx';
 import { UIProvider, useUI, ModalLayer, Boundary } from './components/ui.jsx';
@@ -16,6 +16,10 @@ import Profile from './views/Profile.jsx';
 import Inbox from './views/Inbox.jsx';
 import { CoachDashboard, Clients, ClientDetail, Plans, Editor } from './views/Trainer.jsx';
 import Onboarding, { needsInterview } from './views/Onboarding.jsx';
+import Progress from './views/Progress.jsx';
+import Account from './views/Account.jsx';
+import Pricing, { StatusLine } from './views/Pricing.jsx';
+import { TermsPage, PrivacyPage } from './views/Legal.jsx';
 const Interview = () => <Onboarding repeat />;
 
 const Ctx = createContext(null);
@@ -25,13 +29,16 @@ const ROUTES = {
   dzis: ['Dziś', CalendarCheck, Today], plan: ['Plan', Dumbbell, Plan], trener: ['Trener AI', Sparkles, Coach],
   dieta: ['Dieta', Apple, Diet], nagrody: ['Nagrody', Trophy, Rewards], cwiczenia: ['Ćwiczenia', Library, Library_],
   ankieta: ['Ankieta', ClipboardList, Profile], wiadomosci: ['Wiadomości', Mail, Inbox],
-  wywiad: ['Wywiad', ClipboardList, Interview], pulpit: ['Pulpit', LayoutDashboard, CoachDashboard], podopieczni: ['Podopieczni', Users, Clients], plany: ['Plany', NotebookPen, Plans], edytor: ['Kreator planu', NotebookPen, Editor]
+  wywiad: ['Wywiad', ClipboardList, Interview], pulpit: ['Pulpit', LayoutDashboard, CoachDashboard], podopieczni: ['Podopieczni', Users, Clients], plany: ['Plany', NotebookPen, Plans], edytor: ['Kreator planu', NotebookPen, Editor],
+  postepy: ['Postępy', TrendingUp, Progress], konto: ['Konto', UserCog, Account], cennik: ['Abonament', CreditCard, Pricing], regulamin: ['Regulamin', FileText, TermsPage], prywatnosc: ['Prywatność', FileText, PrivacyPage]
 };
 const COACH_ROUTES = ['pulpit', 'podopieczni', 'plany', 'edytor'];
 const ME_DOCK = ['dzis', 'plan', 'trener', 'dieta', 'nagrody'];
-const ME_SIDE = ['dzis', 'plan', 'trener', 'cwiczenia', 'dieta', 'nagrody', 'ankieta', 'wiadomosci'];
+const ME_SIDE = ['dzis', 'plan', 'trener', 'postepy', 'cwiczenia', 'dieta', 'nagrody', 'ankieta', 'wiadomosci', 'konto'];
+const FREE_ROUTES = ['cennik', 'konto', 'regulamin', 'prywatnosc'];
+const QKEY = 'pompujto:unsynced';
 const COACH_DOCK = ['pulpit', 'podopieczni', 'plany', 'wiadomosci'];
-const COACH_SIDE = ['pulpit', 'podopieczni', 'plany', 'wiadomosci', 'cwiczenia'];
+const COACH_SIDE = ['pulpit', 'podopieczni', 'plany', 'wiadomosci', 'cwiczenia', 'konto'];
 
 function useRoute() {
   const get = () => { let h = (location.hash || '#dzis').slice(1); if (h === 'panel') h = 'pulpit'; return h.startsWith('p-') || ROUTES[h] ? h : 'dzis'; };
@@ -52,7 +59,15 @@ function Shell() {
   const route = useRoute();
   const { modal, toast } = useUI();
 
-  const flush = useCallback(() => { if (pending.current) { const d = pending.current; pending.current = null; api.save(d).catch(e => toast('Nie zapisano: ' + e.message)); } }, []);
+  const [offline, setOffline] = useState(() => { try { return !!localStorage.getItem(QKEY); } catch (e) { return false; } });
+  const park = d => { try { localStorage.setItem(QKEY, JSON.stringify({ id: d.id, at: Date.now(), data: d })); } catch (e) { } setOffline(true); };
+  const flush = useCallback(() => {
+    if (!pending.current) return; const d = pending.current; pending.current = null;
+    api.save(d).then(() => { try { localStorage.removeItem(QKEY); } catch (e) { } setOffline(false); }, e => { park(d); if (navigator.onLine) toast('Nie zapisano: ' + e.message + ' – spróbuję ponownie.'); });
+  }, []);
+  // ponowna wysyłka zapisu, gdy wróci internet
+  const retry = useCallback(() => { let q = null; try { q = JSON.parse(localStorage.getItem(QKEY) || 'null'); } catch (e) { } if (!q || !dataRef.current || q.id !== dataRef.current.id) return; pending.current = dataRef.current; flush(); }, [flush]);
+  useEffect(() => { addEventListener('online', retry); const t = setInterval(retry, 45000); return () => { removeEventListener('online', retry); clearInterval(t); }; }, [retry]);
   const update = useCallback(fn => {
     setData(prev => { const d = structuredClone(prev); fn(d); pending.current = d; clearTimeout(timer.current); timer.current = setTimeout(flush, 500); return d; });
   }, [flush]);
@@ -73,7 +88,10 @@ function Shell() {
     try {
       const s = await api.session(); setMe(s);
       if (s) {
-        const d = await api.load(); const msgs = applyCoach(d, d._coach);
+        let d = await api.load();
+        try { const q = JSON.parse(localStorage.getItem(QKEY) || 'null'); if (q && q.id === d.id && q.data && (q.data.history || []).length >= (d.history || []).length) { const c = d._coach; d = normalize(q.data, d.id, d.name); d._coach = c; setTimeout(() => { pending.current = d; flush(); }, 300); } } catch (e) { }
+        if (isTrainer(s) && (!location.hash || location.hash === '#')) history.replaceState(null, '', '#pulpit'), dispatchEvent(new HashChangeEvent('hashchange'));
+        const msgs = applyCoach(d, d._coach);
         setData(d); if (msgs.length) { api.save(d).catch(() => { }); setTimeout(() => msgs.forEach(toast), 600); }
         api.inbox().then(setInbox).catch(() => { });
       }
@@ -112,22 +130,23 @@ function Shell() {
   if (me === undefined) return <div className="auth"><Brand size={72} /></div>;
   if (!me || !data) return <Auth onDone={boot} />;
 
-  const isAdmin = me.role === 'admin';
+  const isAdmin = me.role === 'admin', trainer = isTrainer(me), acc = access(me);
   const coachRoute = COACH_ROUTES.includes(route) || route.startsWith('p-');
-  const mode = isAdmin && (coachRoute || (route === 'wiadomosci' && lastMode === 'coach')) ? 'coach' : 'me';
-  if (isAdmin && route !== 'wiadomosci' && mode !== lastMode) setTimeout(() => setLastMode(mode), 0);
+  const mode = trainer && (coachRoute || (route === 'wiadomosci' && lastMode === 'coach')) ? 'coach' : 'me';
+  if (trainer && route !== 'wiadomosci' && mode !== lastMode) setTimeout(() => setLastMode(mode), 0);
   document.documentElement.classList.toggle('coach-mode', mode === 'coach');
   const unread = inbox.filter(m => !m.read).length;
-  const logout = async () => { flush(); document.documentElement.classList.remove('coach-mode'); await api.signOut(); setData(null); setMe(null); setUsers(null); location.hash = '#dzis'; };
+  const logout = async gone => { if (!gone) flush(); document.documentElement.classList.remove('coach-mode'); if (!gone) await api.signOut().catch(() => { }); setData(null); setMe(null); setUsers(null); location.hash = '#dzis'; };
   const theme = () => {
     const r = document.documentElement, cur = r.dataset.theme || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
     r.dataset.theme = cur === 'dark' ? 'light' : 'dark';
     try { localStorage.setItem('pompujto:theme', r.dataset.theme); } catch (e) { }
   };
   const openEditor = (program, target) => { setEditor({ program: structuredClone(program), target }); location.hash = '#edytor'; };
-  const ctx = { me, data, update, isAdmin, inbox, unread, refreshInbox, flush, logout, users, clients, reloadClients, saveClient, editor, setEditor, openEditor };
-  let View = route.startsWith('p-') ? (isAdmin ? ClientDetail : Today) : (!isAdmin && COACH_ROUTES.includes(route)) ? Today : ROUTES[route][2];
-  if (mode === 'me' && needsInterview(data) && ['dzis', 'plan', 'dieta', 'nagrody', 'trener'].includes(route)) View = Onboarding;
+  const ctx = { me, setMe, data, update, isAdmin, trainer, access: acc, inbox, unread, refreshInbox, flush, logout, users, clients, reloadClients, saveClient, editor, setEditor, openEditor };
+  let View = route.startsWith('p-') ? (trainer ? ClientDetail : Today) : (!trainer && COACH_ROUTES.includes(route)) ? Today : ROUTES[route][2];
+  if (!acc.ok && !FREE_ROUTES.includes(route)) View = Pricing;
+  else if (mode === 'me' && needsInterview(data) && ['dzis', 'plan', 'dieta', 'nagrody', 'trener'].includes(route)) View = Onboarding;
   const initials = (data.name || '?').split(' ').map(x => x[0]).join('').slice(0, 2).toUpperCase();
   const lvl = window.PJ.level(window.PJ.totalXP(data));
   const side = mode === 'coach' ? COACH_SIDE : ME_SIDE, dock = mode === 'coach' ? COACH_DOCK : ME_DOCK;
@@ -135,16 +154,16 @@ function Shell() {
 
   const menu = () => modal(close => (
     <div className="stack">
-      <div className="row"><span className="av lg">{initials}</span><div><h3>{data.name}</h3><p className="small muted">{me.email} · {isAdmin ? 'trener' : 'podopieczny'} · poziom {lvl.n}</p></div></div>
+      <div className="row"><span className="av lg">{initials}</span><div><h3>{data.name}</h3><p className="small muted">{me.email} · {isAdmin ? 'administrator' : trainer ? 'trener' : me.coach_id ? 'podopieczny' : 'dla siebie'} · poziom {lvl.n}</p><StatusLine me={me} /></div></div>
       <div className="stack" style={{ gap: 6 }}>
-        {(mode === 'coach' ? ['dzis', 'ankieta'] : ['ankieta', 'cwiczenia', 'wiadomosci', ...(isAdmin ? ['pulpit'] : [])]).map(k => { const [n, I] = ROUTES[k]; return <a key={k} className="btn" style={{ justifyContent: 'flex-start' }} href={'#' + k} onClick={close}><I size={18} />{k === 'pulpit' ? 'Panel trenera' : k === 'dzis' ? 'Mój trening' : n}{k === 'wiadomosci' && unread ? <span className="tag pink">{unread}</span> : null}</a>; })}
+        {(mode === 'coach' ? ['dzis', 'konto', 'cennik'] : ['postepy', 'ankieta', 'cwiczenia', 'wiadomosci', 'konto', ...(trainer ? ['pulpit'] : [])]).map(k => { const [n, I] = ROUTES[k]; return <a key={k} className="btn" style={{ justifyContent: 'flex-start' }} href={'#' + k} onClick={close}><I size={18} />{k === 'pulpit' ? 'Panel trenera' : k === 'dzis' ? 'Mój trening' : n}{k === 'wiadomosci' && unread ? <span className="tag pink">{unread}</span> : null}</a>; })}
         <button className="btn" style={{ justifyContent: 'flex-start' }} onClick={theme}><SunMoon size={18} />Zmień motyw</button>
         <button className="btn danger" style={{ justifyContent: 'flex-start' }} onClick={() => { close(); logout(); }}><LogOut size={18} />Wyloguj</button>
       </div>
       {MODE === 'local' && <p className="xs muted">Tryb lokalny: konta są zapisane tylko w tej przeglądarce.</p>}
     </div>
   ));
-  const ModeSwitch = () => isAdmin ? (
+  const ModeSwitch = () => trainer ? (
     <div className="seg modeswitch" role="tablist" aria-label="Tryb">
       {[['me', 'Ja', '#dzis', User], ['coach', 'Trener', '#pulpit', Users]].map(([k, n, h, I]) => (
         <a key={k} href={h} className={mode === k ? 'on' : ''} role="tab" aria-selected={mode === k}>
@@ -158,7 +177,7 @@ function Shell() {
       <div className={'shell ' + (mode === 'coach' ? 'coach-mode' : '')}>
         <aside className="side">
           <div style={{ padding: '4px 10px 14px' }}><Brand /></div>
-          {isAdmin && <div style={{ padding: '0 6px 14px' }}><ModeSwitch /></div>}
+          {trainer && <div style={{ padding: '0 6px 14px' }}><ModeSwitch /></div>}
           {mode === 'coach' && <p className="eyebrow" style={{ padding: '0 14px 6px' }}>Panel trenera</p>}
           {side.map(k => { const [n, I] = ROUTES[k]; return (
             <a key={k} href={'#' + k} className={active(k) ? 'on' : ''}>
@@ -178,6 +197,7 @@ function Shell() {
             <button className="me" onClick={menu} aria-label="Menu konta"><span className="av">{initials}</span><span className="small hide-sm" style={{ fontWeight: 800 }}>Poz. {lvl.n}</span></button>
           </header>
           <main className="content">
+            {offline && <div className="banner info" style={{ marginBottom: 12 }}><WifiOff size={18} /><div><b>Brak połączenia</b>Zapisuję wszystko w telefonie i wyślę, gdy wróci internet.</div></div>}
             <Boundary key={route}><AnimatePresence mode="wait"><View key={route} /></AnimatePresence></Boundary>
           </main>
         </div>
