@@ -1,3 +1,4 @@
+import { CoachDietCard } from './Diets.jsx';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Shuffle, Droplet } from 'lucide-react';
@@ -23,6 +24,7 @@ export default function Diet() {
   return (
     <Page>
       <div className="spread"><div><p className="eyebrow">Plan żywieniowy</p><h1>Dieta</h1></div><Seg id="diet" value={tab} onChange={setTab} options={[['day', 'Jadłospis'], ['rules', 'Jedz / unikaj'], ['shop', 'Zakupy']]} /></div>
+      {p.coachDiet && <CoachDietCard diet={p.coachDiet} who={p.name} />}
       <Stagger className="tiles">{tiles.map(([n, v, u, s]) => <Item key={n} className="tile"><span className="eyebrow">{n}</span><span className="v"><Count to={v} dec={v % 1 ? 1 : 0} /><small>{u}</small></span>{s && <span className="xs muted">{s}</span>}</Item>)}</Stagger>
       {p.targetWeight ? <div className="card tight stack"><div className="spread small"><span>Cel: <b>{comma(p.targetWeight)} kg</b> · teraz {comma(p.weight)} kg</span><span className="muted">{Math.abs(p.weight - p.targetWeight) < 0.5 ? 'cel osiągnięty!' : `zostało ${comma(Math.abs(p.weight - p.targetWeight).toFixed(1))} kg`}</span></div>{(() => { const w = p.weights || [], start = w.length ? w[0].kg : p.weight, tot = Math.abs(start - p.targetWeight) || 1; return <Bar value={Math.max(0, tot - Math.abs(p.weight - p.targetWeight))} max={tot} tone="mint" />; })()}</div> : null}
       <p className="xs muted">Przemiana podstawowa {nt.bmr} kcal (Mifflin‑St Jeor), całkowita ok. {nt.tdee} kcal.{nt.pace ? ` Tempo: ok. ${comma(nt.pace)} kg tygodniowo.` : ''} To nie porada dietetyka – przy chorobach skonsultuj jadłospis.</p>

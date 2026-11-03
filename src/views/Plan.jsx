@@ -11,7 +11,7 @@ const DAYS = [[1, 'Pn'], [2, 'Wt'], [3, 'Śr'], [4, 'Cz'], [5, 'Pt'], [6, 'So'],
 const LVL = { beginner: 'początkujący', intermediate: 'średnio zaawansowany', advanced: 'zaawansowany' };
 const GOALS = { redukcja: 'redukcja', zdrowie: 'zdrowie i kondycja', masa: 'budowa mięśni', sila: 'siła' };
 
-export function AiPlanSheet({ p, onApply, close }) {
+export function AiPlanSheet({ p, onApply, close, applyLabel = 'Biorę ten plan' }) {
   const [wish, setWish] = useState(''), [busy, setBusy] = useState(false), [res, setRes] = useState(null), [err, setErr] = useState('');
   const go = async () => {
     setBusy(true); setErr(''); setRes(null);
@@ -19,7 +19,7 @@ export function AiPlanSheet({ p, onApply, close }) {
     catch (e) { setErr(e.code === 'offline' ? 'offline' : e.message); }
     setBusy(false);
   };
-  const local = () => { const pr = PJ().buildProgram(p, p.history, p.program); onApply(pr); close(); };
+  const local = () => { const pr = PJ().buildProgram(p, p.history || [], p.program); onApply(pr); close(); };
   return (
     <div className="stack">
       <span className="ai-badge" style={{ justifySelf: 'start' }}><Sparkles size={12} />Trener AI</span>
@@ -33,7 +33,7 @@ export function AiPlanSheet({ p, onApply, close }) {
         <h3>{res.name}</h3><p className="small">{res.basis}</p>
         {res.days.map(d => <div key={d.key} className="stack" style={{ gap: 4 }}><p className="eyebrow">Dzień {d.key} · {d.name}</p><p className="small muted">{d.slots.map(s => PJ().BY[s.exId].n).join(' · ')}</p></div>)}
         {res.tips && res.tips.length > 0 && <ul className="list small">{res.tips.map((t, i) => <li key={i}>{t}</li>)}</ul>}
-        <div className="row"><button className="btn pri" onClick={() => { onApply(res); close(); }}>Biorę ten plan</button><button className="btn" onClick={go}><RefreshCw size={16} />Inna wersja</button></div>
+        <div className="row"><button className="btn pri" onClick={() => { onApply(res); close(); }}>{applyLabel}</button><button className="btn" onClick={go}><RefreshCw size={16} />Inna wersja</button></div>
       </motion.div>}</AnimatePresence>
     </div>
   );

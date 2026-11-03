@@ -10,6 +10,7 @@ import { AiPlanSheet } from './Plan.jsx';
 import { SurveyForm } from './Profile.jsx';
 import { LineChart } from './Rewards.jsx';
 import { ProgressBody } from './Progress.jsx';
+import { CoachDietCard, NewDietSheet, BriefForm, assignDiet } from './Diets.jsx';
 import { inviteLink } from './Account.jsx';
 import { PRICES } from '../lib/backend.js';
 const PJ = () => window.PJ;
@@ -244,7 +245,7 @@ export function ClientDetail() {
   const assign = pr => assignPlan(ctx, c, pr, toast).then(ok => ok && ctx.reloadClients());
   const library = ctx.data.coachPlans || [];
   const fromLibrary = () => modal(close => <div className="stack"><h2>Plan z biblioteki</h2>{library.length ? library.map(pl => <button key={pl.id} className="treat" onClick={() => { close(); assign(pl); }}><span className="treat-ic"><NotebookPen size={18} /></span><span><b>{pl.name}</b><span className="xs muted">{pl.days.length} dni · {pl.days.reduce((t, x) => t + x.slots.length, 0)} ćwiczeń</span></span></button>) : <p className="muted">Biblioteka jest pusta. Utwórz plan w zakładce Plany.</p>}</div>);
-  const tabs = [['przeglad', 'Przegląd'], ['plan', 'Plan'], ['postepy', 'Postępy'], ['historia', 'Historia'], ['ankieta', 'Ankieta'], ['notatki', 'Notatki']];
+  const tabs = [['przeglad', 'Przegląd'], ['plan', 'Plan'], ['dieta', 'Dieta'], ['postepy', 'Postępy'], ['historia', 'Historia'], ['ankieta', 'Ankieta'], ['notatki', 'Notatki']];
   return (
     <Page>
       <a href="#podopieczni" className="btn ghost sm" style={{ justifySelf: 'start' }}><ChevronLeft size={16} />Podopieczni</a>
@@ -295,8 +296,8 @@ export function ClientDetail() {
           <div className="card stack"><h3>Zmień plan</h3>
             <button className="btn pri" style={{ justifyContent: 'flex-start' }} onClick={() => ctx.openEditor(toEditable(d.program || blankProgram(), d), { kind: 'client', id: c.id, name: c.name })}><NotebookPen size={16} />Rozpisz w kreatorze</button>
             <button className="btn" style={{ justifyContent: 'flex-start' }} onClick={fromLibrary}><BookOpen size={16} />Z mojej biblioteki</button>
-            <button className="btn" style={{ justifyContent: 'flex-start' }} onClick={() => modal(cl => <AiPlanSheet p={d} close={cl} onApply={pr => assign(pr)} />)}><Sparkles size={16} />Ułóż z Trenerem AI</button>
-            <button className="btn" style={{ justifyContent: 'flex-start' }} onClick={() => assign(PJ().buildProgram(d, d.history, d.program))}><Dumbbell size={16} />Ułóż algorytmem</button>
+            <button className="btn" style={{ justifyContent: 'flex-start' }} onClick={() => modal(cl => <AiPlanSheet p={d} close={cl} applyLabel="Popraw w kreatorze" onApply={pr => ctx.openEditor(toEditable(pr, d), { kind: 'client', id: c.id, name: c.name })} />)}><Sparkles size={16} />AI układa, Ty poprawiasz</button>
+            <button className="btn" style={{ justifyContent: 'flex-start' }} onClick={() => ctx.openEditor(toEditable(PJ().buildProgram(d, d.history, d.program), d), { kind: 'client', id: c.id, name: c.name })}><Dumbbell size={16} />Algorytm układa, Ty poprawiasz</button>
             <button className="btn" style={{ justifyContent: 'flex-start' }} onClick={() => d.program && copyText(planText(toEditable(d.program, d)), toast)}><Copy size={16} />Kopiuj plan jako tekst</button>
           </div>
           <div className="card stack"><h3>Ograniczenia z ankiety</h3><p className="small muted">Kreator oznaczy ćwiczenia niezalecane dla tej osoby. Możesz je mimo to dać – świadomie.</p>
@@ -326,6 +327,15 @@ export function ClientDetail() {
       </div>}
 
       {tab === 'postepy' && <ProgressBody d={d} />}
+
+      {tab === 'dieta' && (() => { const cd = coach.diet || d.coachDiet; const dl = ctx.data.coachDiets || []; return <div className="cols">
+        <div className="stack">{cd ? <CoachDietCard diet={cd} who={c.name} coachName={ctx.data.name} compact /> : <div className="card empty"><b>Brak diety od Ciebie</b><span className="small">Podopieczny korzysta z automatycznego jadłospisu ({PJ().nutrition(d).kcal} kcal).</span></div>}</div>
+        <div className="card stack"><h3>Ustaw dietę</h3>
+          <button className="btn pri" style={{ justifyContent: 'flex-start' }} onClick={() => modal(cl => <NewDietSheet client={c} close={cl} />)}><Sparkles size={16} />AI układa pod {c.name.split(' ')[0]}, Ty poprawiasz</button>
+          {cd && <button className="btn" style={{ justifyContent: 'flex-start' }} onClick={() => ctx.openDietEditor(cd, { kind: 'client', id: c.id, name: c.name })}><NotebookPen size={16} />Edytuj obecną dietę</button>}
+          <button className="btn" style={{ justifyContent: 'flex-start' }} disabled={!dl.length} onClick={() => modal(cl => <div className="stack"><h2>Dieta z biblioteki</h2>{dl.map(x => <button key={x.id} className="treat" onClick={() => { cl(); assignDiet(ctx, c, x, toast).then(ok => ok && ctx.reloadClients()); }}><span className="treat-ic"><BookOpen size={18} /></span><span><b>{x.name}</b><span className="xs muted">{x.kcal} kcal · {x.days.length} dni</span></span></button>)}</div>)}><BookOpen size={16} />Z mojej biblioteki{dl.length ? ` (${dl.length})` : ''}</button>
+          <p className="xs muted">Podopieczny zobaczy dietę w zakładce Dieta i może pobrać PDF. Ty też możesz pobrać PDF i wysłać go np. na WhatsAppie.</p></div>
+      </div>; })()}
 
       {tab === 'notatki' && <div className="cols">
         <div className="card stack"><h3>Prywatne notatki</h3><p className="xs muted">Widzisz je tylko Ty.</p>
@@ -378,7 +388,8 @@ function NewPlanSheet({ close }) {
     <div className="stack">
       <h2>Nowy plan</h2>
       {opts.map(([n, s, f]) => <button key={n} className="treat" onClick={() => { close(); ctx.openEditor(f(), { kind: 'library' }); }}><span className="treat-ic"><NotebookPen size={18} /></span><span><b>{n}</b><span className="xs muted">{s}</span></span></button>)}
-      <button className="treat" onClick={() => { close(); modal(c => <AiPlanSheet p={ctx.data} close={c} onApply={pr => ctx.openEditor(toEditable(pr, ctx.data), { kind: 'library' })} />); }}><span className="treat-ic"><Sparkles size={18} /></span><span><b>Z Trenerem AI</b><span className="xs muted">Opisz, czego chcesz, a potem popraw w kreatorze</span></span></button>
+      <div className="card stack"><b className="small"><Sparkles size={14} style={{ verticalAlign: '-2px' }} /> AI układa, Ty poprawiasz – podaj dane osoby</b>
+        <BriefForm withTraining cta="Dalej – ułóż z AI" onSubmit={p => { close(); modal(c => <AiPlanSheet p={p} close={c} applyLabel="Popraw w kreatorze" onApply={pr => ctx.openEditor(toEditable(pr, p), { kind: 'library' })} />); }} /></div>
     </div>
   );
 }

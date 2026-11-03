@@ -388,3 +388,6 @@ html { scroll-padding-top: 90px; scroll-padding-bottom: 200px }
 .side .modeswitch { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); grid-auto-flow: column }
 .side .modeswitch a { padding: 6px 4px }
 .side .modeswitch a span { font-size: .8rem; gap: 4px }
+.dmeal { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--raised) }
+.dmeal.ro { gap: 4px; padding: 10px 12px }
+.coachdiet { border-color: color-mix(in srgb, var(--pink) 40%, var(--line)) }

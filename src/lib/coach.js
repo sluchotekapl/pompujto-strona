@@ -23,6 +23,11 @@ export function applyCoach(d, coach) {
     }
     out.push('Trener zaktualizował Twoją ankietę');
   }
+  if (coach.diet && (coach.dietV || 0) > (d.coachSeen.dietV || 0)) {
+    d.coachDiet = coach.diet;
+    d.coachSeen.dietV = coach.dietV;
+    out.push('Trener przygotował Ci dietę: ' + coach.diet.name);
+  }
   return out;
 }
 

@@ -21,6 +21,7 @@ import Account from './views/Account.jsx';
 import Pricing, { StatusLine } from './views/Pricing.jsx';
 import { TermsPage, PrivacyPage } from './views/Legal.jsx';
 import { AdminAnalytics, AdminUsers } from './views/Admin.jsx';
+import { DietsLibrary, DietEditor } from './views/Diets.jsx';
 const Interview = () => <Onboarding repeat />;
 
 const Ctx = createContext(null);
@@ -31,17 +32,17 @@ const ROUTES = {
   dieta: ['Dieta', Apple, Diet], nagrody: ['Nagrody', Trophy, Rewards], cwiczenia: ['Ćwiczenia', Library, Library_],
   ankieta: ['Ankieta', ClipboardList, Profile], wiadomosci: ['Wiadomości', Mail, Inbox],
   wywiad: ['Wywiad', ClipboardList, Interview], pulpit: ['Pulpit', LayoutDashboard, CoachDashboard], podopieczni: ['Podopieczni', Users, Clients], plany: ['Plany', NotebookPen, Plans], edytor: ['Kreator planu', NotebookPen, Editor],
-  postepy: ['Postępy', TrendingUp, Progress], konto: ['Konto', UserCog, Account], cennik: ['Abonament', CreditCard, Pricing], regulamin: ['Regulamin', FileText, TermsPage], admin: ['Analityka', BarChart3, AdminAnalytics], uzytkownicy: ['Użytkownicy', Users, AdminUsers], prywatnosc: ['Prywatność', FileText, PrivacyPage]
+  postepy: ['Postępy', TrendingUp, Progress], konto: ['Konto', UserCog, Account], cennik: ['Abonament', CreditCard, Pricing], regulamin: ['Regulamin', FileText, TermsPage], admin: ['Analityka', BarChart3, AdminAnalytics], diety: ['Diety', Apple, DietsLibrary], 'dieta-edytor': ['Kreator diety', Apple, DietEditor], uzytkownicy: ['Użytkownicy', Users, AdminUsers], prywatnosc: ['Prywatność', FileText, PrivacyPage]
 };
-const COACH_ROUTES = ['pulpit', 'podopieczni', 'plany', 'edytor'];
+const COACH_ROUTES = ['pulpit', 'podopieczni', 'plany', 'edytor', 'diety', 'dieta-edytor'];
 const ADMIN_ROUTES = ['admin', 'uzytkownicy'];
 const ADMIN_SIDE = ['admin', 'uzytkownicy', 'wiadomosci', 'konto'];
 const ME_DOCK = ['dzis', 'plan', 'trener', 'dieta', 'nagrody'];
 const ME_SIDE = ['dzis', 'plan', 'trener', 'postepy', 'cwiczenia', 'dieta', 'nagrody', 'ankieta', 'wiadomosci', 'konto'];
 const FREE_ROUTES = ['cennik', 'konto', 'regulamin', 'prywatnosc'];
 const QKEY = 'pompujto:unsynced';
-const COACH_DOCK = ['pulpit', 'podopieczni', 'plany', 'wiadomosci'];
-const COACH_SIDE = ['pulpit', 'podopieczni', 'plany', 'wiadomosci', 'cwiczenia', 'konto'];
+const COACH_DOCK = ['pulpit', 'podopieczni', 'plany', 'diety', 'wiadomosci'];
+const COACH_SIDE = ['pulpit', 'podopieczni', 'plany', 'diety', 'wiadomosci', 'cwiczenia', 'konto'];
 
 function useRoute() {
   const get = () => { let h = (location.hash || '#dzis').slice(1); if (h === 'panel') h = 'pulpit'; return h.startsWith('p-') || ROUTES[h] ? h : 'dzis'; };
@@ -56,6 +57,7 @@ function Shell() {
   const [inbox, setInbox] = useState([]);
   const [users, setUsers] = useState(null);
   const [editor, setEditor] = useState(null);
+  const [dietEditor, setDietEditor] = useState(null);
   const [lastMode, setLastMode] = useState('me');
   const timer = useRef(null), pending = useRef(null), dataRef = useRef(null);
   dataRef.current = data;
@@ -80,7 +82,7 @@ function Shell() {
     const c = await api.myCoach().catch(() => null), d = dataRef.current;
     if (!c || !d) return;
     const seen = d.coachSeen || {};
-    if ((c.programV || 0) > (seen.programV || 0) || (c.profileV || 0) > (seen.profileV || 0) || JSON.stringify(c.note || '') !== JSON.stringify((d._coach || {}).note || '')) {
+    if ((c.programV || 0) > (seen.programV || 0) || (c.profileV || 0) > (seen.profileV || 0) || (c.dietV || 0) > (seen.dietV || 0) || JSON.stringify(c.note || '') !== JSON.stringify((d._coach || {}).note || '')) {
       let msgs = [];
       update(x => { msgs = applyCoach(x, c); });
       setTimeout(() => msgs.forEach(toast), 50);
@@ -119,6 +121,7 @@ function Shell() {
         if (patch.program) c.data.program = patch.program;
         if (patch.profile) { const pr = patch.profile; ['level', 'trainDays', 'sessionMin', 'equipment', 'equipPreset', 'age', 'height', 'sex', 'weight'].forEach(k => { if (pr[k] !== undefined) c.data[k] = pr[k]; }); if (pr.survey) c.data.survey = Object.assign({}, c.data.survey, pr.survey); c.data.surveyDone = true; if (pr.name) c.name = pr.name; }
         if (patch.weight) { c.data.weights = (c.data.weights || []).concat(patch.weight); c.data.weight = patch.weight.kg; }
+        if (patch.diet) c.data.coachDiet = patch.diet;
       });
       return;
     }
@@ -126,6 +129,7 @@ function Shell() {
     if (patch.program) { out.program = patch.program; out.programV = (c.programV || 0) + 1; }
     if (patch.profile) { out.profile = patch.profile; out.profileV = (c.profileV || 0) + 1; }
     if ('note' in patch) { out.note = patch.note; out.noteAt = new Date().toISOString(); }
+    if (patch.diet) { out.diet = patch.diet; out.dietV = (c.dietV || 0) + 1; }
     await api.coachSet(client.id, out);
     setUsers(us => (us || []).map(u => u.id === client.id ? { ...u, coach: { ...u.coach, ...out } } : u));
   }, [update]);
@@ -148,14 +152,15 @@ function Shell() {
     try { localStorage.setItem('pompujto:theme', r.dataset.theme); } catch (e) { }
   };
   const openEditor = (program, target) => { setEditor({ program: structuredClone(program), target }); location.hash = '#edytor'; };
-  const ctx = { me, setMe, data, update, isAdmin, trainer, access: acc, inbox, unread, refreshInbox, flush, logout, users, clients, reloadClients, saveClient, editor, setEditor, openEditor };
+  const openDietEditor = (diet, target) => { setDietEditor({ diet: structuredClone(diet), target }); location.hash = '#dieta-edytor'; };
+  const ctx = { me, setMe, data, update, isAdmin, trainer, access: acc, inbox, unread, refreshInbox, flush, logout, users, clients, reloadClients, saveClient, editor, setEditor, openEditor, dietEditor, setDietEditor, openDietEditor };
   let View = route.startsWith('p-') ? (trainer ? ClientDetail : Today) : (!trainer && COACH_ROUTES.includes(route)) || (!isAdmin && ADMIN_ROUTES.includes(route)) ? Today : ROUTES[route][2];
   if (!acc.ok && !FREE_ROUTES.includes(route)) View = Pricing;
   else if (mode === 'me' && needsInterview(data) && ['dzis', 'plan', 'dieta', 'nagrody', 'trener'].includes(route)) View = Onboarding;
   const initials = (data.name || '?').split(' ').map(x => x[0]).join('').slice(0, 2).toUpperCase();
   const lvl = window.PJ.level(window.PJ.totalXP(data));
   const side = mode === 'admin' ? ADMIN_SIDE : mode === 'coach' ? COACH_SIDE : ME_SIDE, dock = mode === 'admin' ? ADMIN_SIDE : mode === 'coach' ? COACH_DOCK : ME_DOCK;
-  const active = k => route === k || (k === 'podopieczni' && route.startsWith('p-')) || (k === 'plany' && route === 'edytor');
+  const active = k => route === k || (k === 'podopieczni' && route.startsWith('p-')) || (k === 'plany' && route === 'edytor') || (k === 'diety' && route === 'dieta-edytor');
 
   const menu = () => modal(close => (
     <div className="stack">
