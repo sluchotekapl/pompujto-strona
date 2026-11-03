@@ -348,3 +348,43 @@ html { scroll-padding-top: 90px; scroll-padding-bottom: 200px }
 .feats { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px } .feats li { display: flex; gap: 8px; align-items: flex-start; font-size: .92rem } .feats svg { color: var(--mint); flex: none; margin-top: 2px }
 .linkbtn { background: none; border: 0; padding: 0; color: var(--pink); font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer }
 .legal h3 { margin-top: 6px } .legal p, .legal li { font-size: .92rem; line-height: 1.55 }
+
+/* ---------- tryb administratora: chłodny, rzeczowy wygląd „konsoli” ---------- */
+:root.admin-mode {
+  --bg: #0b0e13; --bg2: #10141b; --surface: #131820; --raised: #1a202a; --line: #232b37; --line2: #2e3846;
+  --ink: #e8edf3; --muted: #93a0b0; --faint: #5f6b7a;
+  --pink: #7c8cff; --pink2: #a3aeff; --pink-soft: rgba(124,140,255,.13); --on-pink: #0b0e1f;
+  --display: "Manrope", "Segoe UI", system-ui, sans-serif;
+  --r: 12px; --r-md: 10px; --r-sm: 8px;
+  --shadow: 0 1px 2px rgba(0,0,0,.35); --glow: none;
+}
+@media (prefers-color-scheme: light) { :root.admin-mode:not([data-theme="dark"]) {
+  --bg: #f4f6f9; --bg2: #eceff4; --surface: #ffffff; --raised: #f6f8fb; --line: #e1e6ed; --line2: #ccd4de;
+  --ink: #111827; --muted: #5b6676; --faint: #9aa4b2;
+  --pink: #4353e0; --pink2: #6b78ea; --pink-soft: rgba(67,83,224,.09); --on-pink: #ffffff;
+  --shadow: 0 1px 2px rgba(17,24,39,.06); --glow: none } }
+:root[data-theme="light"].admin-mode {
+  --bg: #f4f6f9; --bg2: #eceff4; --surface: #ffffff; --raised: #f6f8fb; --line: #e1e6ed; --line2: #ccd4de;
+  --ink: #111827; --muted: #5b6676; --faint: #9aa4b2;
+  --pink: #4353e0; --pink2: #6b78ea; --pink-soft: rgba(67,83,224,.09); --on-pink: #ffffff;
+  --shadow: 0 1px 2px rgba(17,24,39,.06); --glow: none }
+.admin-mode h1 { font-weight: 800; letter-spacing: -.02em; font-size: clamp(1.5rem, 3.2vw, 2rem) }
+.admin-mode h2, .admin-mode h3 { font-weight: 800; letter-spacing: -.01em }
+.admin-mode .card { box-shadow: var(--shadow) }
+.admin-mode .btn.pri { box-shadow: none }
+.admin-mode body, .admin-mode .content { background-image: none }
+.kpis { display: grid; gap: 1px; grid-template-columns: repeat(3, minmax(0, 1fr)); background: var(--line); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden }
+.kpi { background: var(--surface); padding: 16px 18px; display: grid; gap: 4px; min-width: 0 }
+.kpi .k-l { display: flex; align-items: center; gap: 6px; font-size: .74rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em }
+.kpi .k-v { font-size: 1.9rem; font-weight: 800; line-height: 1.1; font-family: var(--body) }
+.kpi .k-s { font-size: .78rem; color: var(--faint) }
+.funnel { display: grid; gap: 5px }
+.fbar { height: 8px; border-radius: 99px; background: var(--raised); overflow: hidden } .fbar i { display: block; height: 100%; background: var(--pink); border-radius: 99px }
+.admin-table th { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); white-space: nowrap }
+.admin-table td, .admin-table th { padding: 10px 14px; vertical-align: middle }
+.admin-table select { padding: 6px 8px; font-size: .85rem; min-width: 118px }
+.admin-table tbody tr:hover { background: var(--raised) }
+@media (max-width: 720px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)) } }
+.side .modeswitch { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); grid-auto-flow: column }
+.side .modeswitch a { padding: 6px 4px }
+.side .modeswitch a span { font-size: .8rem; gap: 4px }

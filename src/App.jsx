@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, MotionConfig } from 'framer-motion';
-import { Bell, Dumbbell, CalendarCheck, Sparkles, Apple, Trophy, Library, ClipboardList, LogOut, Mail, SunMoon, LayoutDashboard, Users, NotebookPen, User, TrendingUp, UserCog, CreditCard, FileText, WifiOff } from 'lucide-react';
+import { Bell, Dumbbell, CalendarCheck, Sparkles, Apple, Trophy, Library, ClipboardList, LogOut, Mail, SunMoon, LayoutDashboard, Users, NotebookPen, User, TrendingUp, UserCog, CreditCard, FileText, WifiOff, BarChart3, ShieldCheck } from 'lucide-react';
 import { api, MODE, normalize, isTrainer, access } from './lib/backend.js';
 import { applyCoach } from './lib/coach.js';
 import { Brand } from './components/Logo.jsx';
@@ -20,6 +20,7 @@ import Progress from './views/Progress.jsx';
 import Account from './views/Account.jsx';
 import Pricing, { StatusLine } from './views/Pricing.jsx';
 import { TermsPage, PrivacyPage } from './views/Legal.jsx';
+import { AdminAnalytics, AdminUsers } from './views/Admin.jsx';
 const Interview = () => <Onboarding repeat />;
 
 const Ctx = createContext(null);
@@ -30,9 +31,11 @@ const ROUTES = {
   dieta: ['Dieta', Apple, Diet], nagrody: ['Nagrody', Trophy, Rewards], cwiczenia: ['Ćwiczenia', Library, Library_],
   ankieta: ['Ankieta', ClipboardList, Profile], wiadomosci: ['Wiadomości', Mail, Inbox],
   wywiad: ['Wywiad', ClipboardList, Interview], pulpit: ['Pulpit', LayoutDashboard, CoachDashboard], podopieczni: ['Podopieczni', Users, Clients], plany: ['Plany', NotebookPen, Plans], edytor: ['Kreator planu', NotebookPen, Editor],
-  postepy: ['Postępy', TrendingUp, Progress], konto: ['Konto', UserCog, Account], cennik: ['Abonament', CreditCard, Pricing], regulamin: ['Regulamin', FileText, TermsPage], prywatnosc: ['Prywatność', FileText, PrivacyPage]
+  postepy: ['Postępy', TrendingUp, Progress], konto: ['Konto', UserCog, Account], cennik: ['Abonament', CreditCard, Pricing], regulamin: ['Regulamin', FileText, TermsPage], admin: ['Analityka', BarChart3, AdminAnalytics], uzytkownicy: ['Użytkownicy', Users, AdminUsers], prywatnosc: ['Prywatność', FileText, PrivacyPage]
 };
 const COACH_ROUTES = ['pulpit', 'podopieczni', 'plany', 'edytor'];
+const ADMIN_ROUTES = ['admin', 'uzytkownicy'];
+const ADMIN_SIDE = ['admin', 'uzytkownicy', 'wiadomosci', 'konto'];
 const ME_DOCK = ['dzis', 'plan', 'trener', 'dieta', 'nagrody'];
 const ME_SIDE = ['dzis', 'plan', 'trener', 'postepy', 'cwiczenia', 'dieta', 'nagrody', 'ankieta', 'wiadomosci', 'konto'];
 const FREE_ROUTES = ['cennik', 'konto', 'regulamin', 'prywatnosc'];
@@ -132,11 +135,13 @@ function Shell() {
 
   const isAdmin = me.role === 'admin', trainer = isTrainer(me), acc = access(me);
   const coachRoute = COACH_ROUTES.includes(route) || route.startsWith('p-');
-  const mode = trainer && (coachRoute || (route === 'wiadomosci' && lastMode === 'coach')) ? 'coach' : 'me';
-  if (trainer && route !== 'wiadomosci' && mode !== lastMode) setTimeout(() => setLastMode(mode), 0);
+  const adminRoute = isAdmin && ADMIN_ROUTES.includes(route);
+  const mode = adminRoute || (isAdmin && ['wiadomosci', 'konto'].includes(route) && lastMode === 'admin') ? 'admin' : trainer && (coachRoute || (route === 'wiadomosci' && lastMode === 'coach')) ? 'coach' : 'me';
+  if (trainer && !['wiadomosci', 'konto'].includes(route) && mode !== lastMode) setTimeout(() => setLastMode(mode), 0);
   document.documentElement.classList.toggle('coach-mode', mode === 'coach');
+  document.documentElement.classList.toggle('admin-mode', mode === 'admin');
   const unread = inbox.filter(m => !m.read).length;
-  const logout = async gone => { if (!gone) flush(); document.documentElement.classList.remove('coach-mode'); if (!gone) await api.signOut().catch(() => { }); setData(null); setMe(null); setUsers(null); location.hash = '#dzis'; };
+  const logout = async gone => { if (!gone) flush(); document.documentElement.classList.remove('coach-mode', 'admin-mode'); if (!gone) await api.signOut().catch(() => { }); setData(null); setMe(null); setUsers(null); location.hash = '#dzis'; };
   const theme = () => {
     const r = document.documentElement, cur = r.dataset.theme || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
     r.dataset.theme = cur === 'dark' ? 'light' : 'dark';
@@ -144,19 +149,19 @@ function Shell() {
   };
   const openEditor = (program, target) => { setEditor({ program: structuredClone(program), target }); location.hash = '#edytor'; };
   const ctx = { me, setMe, data, update, isAdmin, trainer, access: acc, inbox, unread, refreshInbox, flush, logout, users, clients, reloadClients, saveClient, editor, setEditor, openEditor };
-  let View = route.startsWith('p-') ? (trainer ? ClientDetail : Today) : (!trainer && COACH_ROUTES.includes(route)) ? Today : ROUTES[route][2];
+  let View = route.startsWith('p-') ? (trainer ? ClientDetail : Today) : (!trainer && COACH_ROUTES.includes(route)) || (!isAdmin && ADMIN_ROUTES.includes(route)) ? Today : ROUTES[route][2];
   if (!acc.ok && !FREE_ROUTES.includes(route)) View = Pricing;
   else if (mode === 'me' && needsInterview(data) && ['dzis', 'plan', 'dieta', 'nagrody', 'trener'].includes(route)) View = Onboarding;
   const initials = (data.name || '?').split(' ').map(x => x[0]).join('').slice(0, 2).toUpperCase();
   const lvl = window.PJ.level(window.PJ.totalXP(data));
-  const side = mode === 'coach' ? COACH_SIDE : ME_SIDE, dock = mode === 'coach' ? COACH_DOCK : ME_DOCK;
+  const side = mode === 'admin' ? ADMIN_SIDE : mode === 'coach' ? COACH_SIDE : ME_SIDE, dock = mode === 'admin' ? ADMIN_SIDE : mode === 'coach' ? COACH_DOCK : ME_DOCK;
   const active = k => route === k || (k === 'podopieczni' && route.startsWith('p-')) || (k === 'plany' && route === 'edytor');
 
   const menu = () => modal(close => (
     <div className="stack">
       <div className="row"><span className="av lg">{initials}</span><div><h3>{data.name}</h3><p className="small muted">{me.email} · {isAdmin ? 'administrator' : trainer ? 'trener' : me.coach_id ? 'podopieczny' : 'dla siebie'} · poziom {lvl.n}</p><StatusLine me={me} /></div></div>
       <div className="stack" style={{ gap: 6 }}>
-        {(mode === 'coach' ? ['dzis', 'konto', 'cennik'] : ['postepy', 'ankieta', 'cwiczenia', 'wiadomosci', 'konto', ...(trainer ? ['pulpit'] : [])]).map(k => { const [n, I] = ROUTES[k]; return <a key={k} className="btn" style={{ justifyContent: 'flex-start' }} href={'#' + k} onClick={close}><I size={18} />{k === 'pulpit' ? 'Panel trenera' : k === 'dzis' ? 'Mój trening' : n}{k === 'wiadomosci' && unread ? <span className="tag pink">{unread}</span> : null}</a>; })}
+        {(mode === 'admin' ? ['dzis', 'pulpit', 'konto'] : mode === 'coach' ? ['dzis', 'konto', 'cennik', ...(isAdmin ? ['admin'] : [])] : ['postepy', 'ankieta', 'cwiczenia', 'wiadomosci', 'konto', ...(trainer ? ['pulpit'] : [])]).map(k => { const [n, I] = ROUTES[k]; return <a key={k} className="btn" style={{ justifyContent: 'flex-start' }} href={'#' + k} onClick={close}><I size={18} />{k === 'pulpit' ? 'Panel trenera' : k === 'dzis' ? 'Mój trening' : n}{k === 'wiadomosci' && unread ? <span className="tag pink">{unread}</span> : null}</a>; })}
         <button className="btn" style={{ justifyContent: 'flex-start' }} onClick={theme}><SunMoon size={18} />Zmień motyw</button>
         <button className="btn danger" style={{ justifyContent: 'flex-start' }} onClick={() => { close(); logout(); }}><LogOut size={18} />Wyloguj</button>
       </div>
@@ -165,7 +170,7 @@ function Shell() {
   ));
   const ModeSwitch = () => trainer ? (
     <div className="seg modeswitch" role="tablist" aria-label="Tryb">
-      {[['me', 'Ja', '#dzis', User], ['coach', 'Trener', '#pulpit', Users]].map(([k, n, h, I]) => (
+      {[['me', 'Ja', '#dzis', User], ['coach', 'Trener', '#pulpit', Users], ...(isAdmin ? [['admin', 'Admin', '#admin', ShieldCheck]] : [])].map(([k, n, h, I]) => (
         <a key={k} href={h} className={mode === k ? 'on' : ''} role="tab" aria-selected={mode === k}>
           {mode === k && <motion.i layoutId="mode-pill" className="pill" transition={{ type: 'spring', damping: 30, stiffness: 400 }} />}
           <span><I size={14} />{n}</span>
@@ -174,11 +179,11 @@ function Shell() {
 
   return (
     <Ctx.Provider value={ctx}>
-      <div className={'shell ' + (mode === 'coach' ? 'coach-mode' : '')}>
+      <div className={'shell ' + (mode !== 'me' ? mode + '-mode' : '')}>
         <aside className="side">
           <div style={{ padding: '4px 10px 14px' }}><Brand /></div>
           {trainer && <div style={{ padding: '0 6px 14px' }}><ModeSwitch /></div>}
-          {mode === 'coach' && <p className="eyebrow" style={{ padding: '0 14px 6px' }}>Panel trenera</p>}
+          {mode !== 'me' && <p className="eyebrow" style={{ padding: '0 14px 6px' }}>{mode === 'admin' ? 'Administracja' : 'Panel trenera'}</p>}
           {side.map(k => { const [n, I] = ROUTES[k]; return (
             <a key={k} href={'#' + k} className={active(k) ? 'on' : ''}>
               {active(k) && <motion.span layoutId="side-pill" className="pill" transition={{ type: 'spring', damping: 30, stiffness: 380 }} />}
