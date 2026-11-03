@@ -22,7 +22,9 @@ function interactionText(d) {
 }
 
 async function gemini(key, system, messages, maxTokens) {
-  const models = [...new Set([process.env.GEMINI_MODEL, 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-2.5-flash'].filter(Boolean))];
+  const models = [...new Set([process.env.GEMINI_MODEL, 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'].filter(Boolean))];
+  const RETRY = [400, 404, 429, 500, 502, 503, 504];
+  const wait = ms => new Promise(r => setTimeout(r, ms));
   const errors = [];
   // 1) Interactions API – nowe API Google, obsługuje nowe klucze (AQ.…) i stare (AIza…)
   const history = messages.slice(0, -1).map(m => (m.role === 'assistant' ? 'Trener: ' : 'Użytkownik: ') + String(m.content || '')).join('\n\n');
@@ -35,7 +37,8 @@ async function gemini(key, system, messages, maxTokens) {
     });
     if (r.ok) { const t = interactionText(await r.json()); if (t) return t; errors.push(`${model}: pusta odpowiedź`); continue; }
     errors.push(`interactions ${model}: ${r.status} ${(await r.text()).slice(0, 160)}`);
-    if (![400, 404, 429].includes(r.status)) break;
+    if (r.status === 503 && model === models[0]) await wait(800);
+    if (!RETRY.includes(r.status)) break;
   }
   // 2) generateContent – starsze API (zapas)
   const body = {
@@ -54,10 +57,13 @@ async function gemini(key, system, messages, maxTokens) {
       errors.push(`${model}: pusta odpowiedź`); continue;
     }
     errors.push(`generateContent ${model}: ${r.status} ${(await r.text()).slice(0, 160)}`);
-    if (![400, 404, 429].includes(r.status)) break;
+    if (!RETRY.includes(r.status)) break;
   }
   const all = errors.join(' | ');
-  if (/API key not valid|API_KEY_INVALID/i.test(all)) throw new Error('Google odrzuca klucz GEMINI_API_KEY – skopiuj go jeszcze raz przyciskiem „Copy key” w AI Studio. ' + errors[0]);
+  if (/API key not valid|API_KEY_INVALID/i.test(all)) throw new Error('Google odrzuca klucz GEMINI_API_KEY – skopiuj go jeszcze raz przyciskiem „Copy key” w AI Studio.');
+  if (/: 503|high demand|overloaded|UNAVAILABLE/i.test(all)) throw new Error('Trener AI jest chwilowo przeciążony (dużo zapytań do Google). Spróbuj za minutę.');
+  if (/: 429|RESOURCE_EXHAUSTED|quota/i.test(all)) throw new Error('Wyczerpany darmowy limit zapytań Gemini na teraz. Spróbuj później.');
+  console.error('AI errors:', all);
   throw new Error(all.slice(0, 600));
 }
 
@@ -99,6 +105,7 @@ export default async (req) => {
     const text = useClaude ? await claude(ck, system, messages, maxTokens) : await gemini(gk, system, messages, maxTokens);
     return json(200, { text });
   } catch (e) {
-    return json(502, { error: 'upstream', message: 'AI chwilowo nie odpowiada. ' + String(e.message || e).slice(0, 300) });
+    const m = String(e.message || e);
+    return json(502, { error: 'upstream', message: /^(Trener AI|Wyczerpany|Google odrzuca)/.test(m) ? m : 'Trener AI chwilowo nie odpowiada. Spróbuj za chwilę.' });
   }
 };

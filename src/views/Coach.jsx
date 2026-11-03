@@ -26,7 +26,7 @@ export default function Coach() {
       update(x => { x.coach = hist.concat({ role: 'assistant', content: a }).slice(-40); });
     } catch (e) {
       if (e.code === 'offline') { setOff(true); update(x => { x.coach = hist.concat({ role: 'assistant', content: 'Trener AI jest teraz wyłączony. Po podłączeniu klucza Claude API (instrukcja w README) odpowiem na każde pytanie o trening i dietę.' }); }); }
-      else toast(e.message);
+      else { update(x => { x.coach = msgs; }); setTxt(q); toast(e.message); }
     }
     setLive(''); setBusy(false);
   };
