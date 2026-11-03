@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Masz zaproszenie! 🎉</title></head>
+<body style="margin:0;padding:0;background:#f5f1f0;font-family:Arial,Helvetica,sans-serif;color:#1c1622">
+<div style="display:none;max-height:0;overflow:hidden">Ktoś zaprosił Cię do Pompujto.pl.</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f1f0;padding:28px 12px">
+<tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px">
+<tr><td align="center" style="padding:6px 0 20px">
+  <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+    <td style="vertical-align:middle"><img src="https://pompujto.netlify.app/icon-192.png" width="44" height="44" alt="" style="display:block;border:0;border-radius:12px"></td>
+    <td style="vertical-align:middle;padding-left:10px;font-size:24px;font-weight:900;letter-spacing:-.5px;color:#1c1622">pompujto<span style="color:#ff4d6d">.pl</span></td>
+  </tr></table>
+</td></tr>
+<tr><td style="background:#ffffff;border-radius:22px;overflow:hidden;border:1px solid #ece4e2">
+  <div style="height:6px;background:#ff4d6d;background-image:linear-gradient(90deg,#ff4d6d,#ff8fa3,#ffb547)"></div>
+  <div style="padding:30px 28px 28px">
+    <h1 style="margin:0 0 12px;font-size:26px;line-height:1.2;font-weight:900;color:#1c1622">Masz zaproszenie! 🎉</h1>
+    <p style="margin:0 0 24px;font-size:16px;line-height:1.55;color:#4a4150">Zaproszono Cię do Pompujto.pl – plan treningowy na każdy dzień, dieta i nagrody za sumienny tydzień. Kliknij, żeby założyć konto.</p>
+    <table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="border-radius:14px;background:#ff4d6d">
+      <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:15px 28px;font-size:16px;font-weight:800;color:#ffffff;text-decoration:none;border-radius:14px">Przyjmij zaproszenie</a>
+    </td></tr></table>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:26px;width:100%">
+<tr><td style="padding:12px 14px;background:#fff1f4;border-radius:14px;font-size:14px;line-height:1.7;color:#4a4150">
+💪 Plan treningowy dopasowany do Ciebie<br>🥗 Dieta z kaloriami i listą zakupów<br>🍕 Nagrody: pizza albo burger za sumienny tydzień
+</td></tr></table>
+    <p style="margin:24px 0 0;font-size:13px;line-height:1.5;color:#8a8090">Jeśli nie znasz nadawcy, zignoruj tę wiadomość.</p>
+    <p style="margin:14px 0 0;font-size:12px;line-height:1.5;color:#a59ca9;word-break:break-all">Przycisk nie działa? Skopiuj ten link do przeglądarki:<br><a href="{{ .ConfirmationURL }}" style="color:#ff4d6d">{{ .ConfirmationURL }}</a></p>
+  </div>
+</td></tr>
+<tr><td align="center" style="padding:18px 10px 0;font-size:12px;line-height:1.5;color:#a59ca9">
+  Pompujto.pl – trening na dziś, dieta, Trener AI i nagrody za sumienny tydzień.<br>Ten mail wysłaliśmy na {{ .Email }}.
+</td></tr>
+</table></td></tr></table></body></html>

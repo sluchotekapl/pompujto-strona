@@ -1,0 +1,22 @@
+{
+ "potwierdzenie": {
+  "subject": "Potwierdź konto w Pompujto.pl 💪",
+  "file": "potwierdzenie.html"
+ },
+ "reset-hasla": {
+  "subject": "Nowe hasło do Pompujto.pl",
+  "file": "reset-hasla.html"
+ },
+ "link-logowania": {
+  "subject": "Twój link do logowania – Pompujto.pl",
+  "file": "link-logowania.html"
+ },
+ "zaproszenie": {
+  "subject": "Zaproszenie do Pompujto.pl",
+  "file": "zaproszenie.html"
+ },
+ "zmiana-emaila": {
+  "subject": "Potwierdź nowy e‑mail – Pompujto.pl",
+  "file": "zmiana-emaila.html"
+ }
+}
