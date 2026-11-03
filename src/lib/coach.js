@@ -57,6 +57,14 @@ export function alertsFor(u) {
   const c = u.coach || {};
   if (!u.offline && c.programV && (d.coachSeen || {}).programV !== c.programV) a.push({ k: 'sync', t: 'Plan czeka na otwarcie aplikacji', tone: 'sky' });
   if (PJ().restrictions(d).doctor) a.push({ k: 'doc', t: 'Wymaga zgody lekarza', tone: 'red' });
+  // waga stoi przy redukcji (≥3 pomiary w 3 tygodnie, zmiana < 0,3 kg)
+  const ws = (d.weights || []).filter(w => Date.now() - new Date(w.date).getTime() < 21 * DAY);
+  if ((d.survey || {}).goal === 'redukcja' && ws.length >= 3 && Math.abs(ws[ws.length - 1].kg - ws[0].kg) < 0.3) a.push({ k: 'plateau', t: 'Waga stoi od 3 tygodni', tone: 'gold' });
+  if (!u.offline && (d.history || []).length >= 2 && !(d.weights || []).some(w => Date.now() - new Date(w.date).getTime() < 14 * DAY)) a.push({ k: 'noweigh', t: 'Brak ważenia od 2 tygodni', tone: 'sky' });
+  const ci = (d.checkins || [])[(d.checkins || []).length - 1];
+  if (ci && Date.now() - new Date(ci.date).getTime() < 8 * DAY && (ci.mood <= 2 || ci.sleep <= 2 || ci.energy <= 2)) a.push({ k: 'lowci', t: 'Słaby tydzień w check-inie' + (ci.note ? ': ' + ci.note : ''), tone: 'gold' });
+  const lastS = (d.history || [])[(d.history || []).length - 1];
+  if (lastS && lastS.prs && lastS.prs.length && Date.now() - new Date(lastS.date).getTime() < 3 * DAY) a.push({ k: 'pr', t: '🏆 Nowy rekord – pogratuluj!', tone: 'mint' });
   return a;
 }
 

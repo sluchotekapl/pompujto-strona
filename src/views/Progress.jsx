@@ -34,6 +34,17 @@ function Heatmap({ d }) {
   );
 }
 
+// zamrożenie serii: tydzień choroby/urlopu nie przerywa serii (2 na kwartał)
+function Freeze({ d }) {
+  const { update } = useApp();
+  const { toast } = useUI();
+  const wk = PJ().weekKey(new Date()), fz = d.freezes || [];
+  const qt = k => k.slice(0, 4) + 'Q' + Math.floor((+k.slice(5, 7) - 1) / 3), q = fz.filter(k => qt(k) === qt(wk)).length;
+  const on = fz.includes(wk);
+  if (on) return <div className="banner info"><div><b>❄️ Ten tydzień jest zamrożony</b>Seria się nie przerwie. Zdrowiej / odpocznij spokojnie.</div></div>;
+  return <div className="banner"><div><b>Choroba albo urlop?</b>Zamroź ten tydzień – seria treningowa się nie przerwie. Zostało {Math.max(0, 2 - q)} z 2 na kwartał.</div><button className="btn sm" disabled={q >= 2} onClick={() => { update(x => { x.freezes = (x.freezes || []).concat(wk).slice(-12); }); toast('Tydzień zamrożony ❄️'); }}>❄️ Zamroź</button></div>;
+}
+
 export function ProgressBody({ d, onAddMeasure }) {
   const { toast } = useUI();
   const lifts = useMemo(() => strength(d), [d.history && d.history.length]);
@@ -58,6 +69,7 @@ export function ProgressBody({ d, onAddMeasure }) {
         {[['Treningi', hist.length, '', 'łącznie'], ['30 dni', month, '', 'treningów'], ['Seria', streak, ' tyg.', 'z rzędu'], ['Rekordy', prs.length, '', 'pobite'], ['Waga', d.weight, ' kg', d.weights && d.weights.length > 1 ? `${(d.weight - d.weights[0].kg) > 0 ? '+' : ''}${comma(Math.round((d.weight - d.weights[0].kg) * 10) / 10)} kg od startu` : 'aktualna']].map(([n, v, u, s]) =>
           <Item key={n} className="tile"><span className="eyebrow">{n}</span><span className="v"><Count to={+v || 0} dec={v % 1 ? 1 : 0} /><small>{u}</small></span><span className="xs muted">{s}</span></Item>)}
       </Stagger>
+      {onAddMeasure && <Freeze d={d} />}
       <div className="card stack"><div className="spread"><h3><CalendarCheck size={18} style={{ verticalAlign: '-3px' }} /> Regularność – 16 tygodni</h3><span className="xs muted row" style={{ gap: 10 }}><span><i className="heat-key on" />trening</span><span><i className="heat-key plan" />dzień z planu</span></span></div><Heatmap d={d} /></div>
       <div className="cols">
         <div className="stack">

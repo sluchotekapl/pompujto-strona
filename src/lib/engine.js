@@ -443,7 +443,8 @@
     let n = 0, d = new Date(); const cur = weekKey(d);
     if ((byW[cur] || 0) >= need) n++;
     d.setDate(d.getDate() - 7);
-    while ((byW[weekKey(d)] || 0) >= need) { n++; d.setDate(d.getDate() - 7); }
+    const fz = p.freezes || [];
+    while ((byW[weekKey(d)] || 0) >= need || fz.includes(weekKey(d))) { if (!fz.includes(weekKey(d)) || (byW[weekKey(d)] || 0) >= need) n++; d.setDate(d.getDate() - 7); }
     return n;
   }
   function totalXP(st) {
