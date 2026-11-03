@@ -30,6 +30,7 @@ export default function Diet() {
       <p className="xs muted">Przemiana podstawowa {nt.bmr} kcal (Mifflin‑St Jeor), całkowita ok. {nt.tdee} kcal.{nt.pace ? ` Tempo: ok. ${comma(nt.pace)} kg tygodniowo.` : ''} To nie porada dietetyka – przy chorobach skonsultuj jadłospis.</p>
 
       {tab === 'day' && <>
+        <WeightTrend p={p} nt={nt} />
         <div className="chips">{Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() + i); return <button key={i} className="chip" aria-pressed={dd === i} onClick={() => setDd(i)}>{i === 0 ? 'Dziś' : d.toLocaleDateString('pl-PL', { weekday: 'short', day: 'numeric' })}</button>; })}</div>
         <div className="cols">
           <div className="card stack"><div className="spread"><h2>{dd === 0 ? 'Dzisiaj' : fmtDate(date)}</h2><span className="num small muted">{sum.k} kcal · {sum.P} g białka</span></div>
@@ -71,4 +72,24 @@ export default function Diet() {
       })()}
     </Page>
   );
+}
+
+// trend wagi z ostatnich 3 tygodni (regresja liniowa) i podpowiedź korekty kalorii – jak w MacroFactor
+export function weightTrend(ws) {
+  const now = Date.now(), pts = (ws || []).filter(w => now - new Date(w.date).getTime() < 28 * 864e5).map(w => [(new Date(w.date).getTime() - now) / (7 * 864e5), +w.kg]);
+  if (pts.length < 3 || pts[pts.length - 1][0] - pts[0][0] < 1.5) return null;
+  const n = pts.length, sx = pts.reduce((t, p) => t + p[0], 0), sy = pts.reduce((t, p) => t + p[1], 0), sxx = pts.reduce((t, p) => t + p[0] * p[0], 0), sxy = pts.reduce((t, p) => t + p[0] * p[1], 0);
+  const slope = (n * sxy - sx * sy) / (n * sxx - sx * sx);
+  return Math.round(slope * 100) / 100;
+}
+function WeightTrend({ p, nt }) {
+  const tr = weightTrend(p.weights); if (tr == null) return null;
+  const goal = (p.survey || {}).goal, pct = tr / p.weight * 100;
+  let msg = null, tone = 'info';
+  if (goal === 'redukcja' && tr > -0.1) { msg = 'Waga stoi od ok. 3 tygodni. Spróbuj zjeść ok. 150 kcal mniej dziennie albo dodaj 2 000 kroków.'; tone = ''; }
+  else if (goal === 'redukcja' && pct < -1) { msg = 'Chudniesz szybciej niż 1% masy na tydzień – dodaj ok. 150 kcal (np. porcję węglowodanów), żeby nie tracić mięśni.'; tone = ''; }
+  else if (goal === 'masa' && tr < 0.1) { msg = 'Na masie waga powinna rosnąć ok. 0,25 kg/tydz. Dodaj ok. 150 kcal dziennie.'; tone = ''; }
+  else if (goal === 'masa' && tr > 0.5) { msg = 'Waga rośnie szybko – możesz zjeść ok. 100–150 kcal mniej, żeby ograniczyć tłuszcz.'; tone = ''; }
+  else msg = 'Tempo zgodne z celem – trzymaj obecne kalorie.';
+  return <div className={'banner ' + (tone || 'pink')}><div><b>Trend wagi: {tr > 0 ? '+' : ''}{String(tr).replace('.', ',')} kg/tydz.</b>{msg}</div></div>;
 }

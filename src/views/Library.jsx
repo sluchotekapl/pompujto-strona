@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search } from 'lucide-react';
 import { useApp } from '../App.jsx';
@@ -10,7 +10,8 @@ const GROUPS = { all: ['Wszystkie', null], nogi: ['Nogi', ['squat', 'lunge', 'hi
 export default function Library() {
   const { data: p } = useApp();
   const { modal } = useUI();
-  const [g, setG] = useState('all'), [q, setQ] = useState(''), [mine, setMine] = useState(false);
+  const [g, setG] = useState('all'), [q, setQ] = useState(() => { try { const v = sessionStorage.getItem('pj:exq') || ''; sessionStorage.removeItem('pj:exq'); return v; } catch (e) { return ''; } }), [mine, setMine] = useState(false);
+  useEffect(() => { const f = () => { try { const v = sessionStorage.getItem('pj:exq'); if (v) { setQ(v); sessionStorage.removeItem('pj:exq'); } } catch (e) { } }; addEventListener('pj-exq', f); return () => removeEventListener('pj-exq', f); }, []);
   const rs = useMemo(() => PJ().restrictions(p), [p]);
   const ok = e => PJ().allowed(e, p, rs);
   const list = PJ().EX.filter(e => (!GROUPS[g][1] || GROUPS[g][1].includes(e.p)) && (!q || (e.n + ' ' + e.en + ' ' + e.m.join(' ')).toLowerCase().includes(q.toLowerCase())) && (!mine || ok(e)));

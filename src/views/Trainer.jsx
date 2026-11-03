@@ -10,6 +10,7 @@ import { AiPlanSheet } from './Plan.jsx';
 import { SurveyForm } from './Profile.jsx';
 import { LineChart } from './Rewards.jsx';
 import { ProgressBody } from './Progress.jsx';
+import { CHECK } from './Today.jsx';
 import { CoachDietCard, NewDietSheet, BriefForm, assignDiet } from './Diets.jsx';
 import { inviteLink } from './Account.jsx';
 import { PRICES } from '../lib/backend.js';
@@ -275,6 +276,9 @@ export function ClientDetail() {
           <div className="stack">
             <div className="card stack"><h3>Masa ciała</h3><LineChart pts={d.weights || []} />
               {c.offline && <div className="row"><input id="okg" type="number" step="0.1" value={kg} onChange={e => setKg(e.target.value)} placeholder="np. 84,5" style={{ maxWidth: 130 }} aria-label="Waga" /><button className="btn" onClick={() => { const v = parseFloat(String(kg).replace(',', '.')); if (!(v > 30 && v < 300)) return toast('Wpisz wagę w kg'); ctx.saveClient(c, { weight: { date: new Date().toISOString(), kg: v, xp: 0 } }); setKg(''); toast('Zapisano'); }}><Scale size={16} />Dodaj pomiar</button></div>}</div>
+            {(d.checkins || []).length > 0 && <div className="card stack"><h3>Check-iny tygodniowe</h3>
+              {(d.checkins || []).slice(-4).reverse().map(ci => <div key={ci.week} className="stack" style={{ gap: 2 }}><div className="spread small"><b>{fmtDate(ci.date)}</b><span>{CHECK.map(([k, n, em]) => <span key={k} title={n} style={{ marginLeft: 6 }}>{em[(ci[k] || 3) - 1]}</span>)}</span></div>{ci.note && <span className="xs muted">„{ci.note}”</span>}</div>)}
+              <p className="xs muted">Samopoczucie · sen · energia · głód</p></div>}
             <div className="card stack"><h3>Zdrowie</h3>
               <p className="small">Kontuzje: {d.survey.injuries.map(k => PJ().INJURIES[k].label).join(', ') || 'brak'}</p>
               <p className="small">Schorzenia: {d.survey.conditions.map(k => PJ().CONDITIONS[k].label).join(', ') || 'brak'}</p>
@@ -311,7 +315,7 @@ export function ClientDetail() {
           <b>{h.dayName}</b><span className="xs muted">{fmtDate(h.date)} · {h.durationMin} min</span>
           <span className="xs muted">ocena {h.feeling}/5 · {Math.round(PJ().volume(h))} kg{h.painNote ? ' · ból: ' + h.painNote : ''}</span><span>{h.prs && h.prs.length ? <span className="tag gold">{h.prs.length} PR</span> : null}</span>
           <AnimatePresence>{open === h.id && <motion.div style={{ gridColumn: '1 / -1', overflow: 'hidden' }} initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }}>
-            <div className="stack" style={{ gap: 4, paddingTop: 8 }}>{h.entries.map((e, i) => <div key={i} className="spread small"><span>{PJ().BY[e.exId] ? PJ().BY[e.exId].n : e.exId}</span><span className="num muted">{e.sets.filter(x => x.done).map(x => (x.w ? comma(x.w) + '×' : '') + x.r).join('  ')}</span></div>)}</div>
+            <div className="stack" style={{ gap: 4, paddingTop: 8 }}>{h.entries.map((e, i) => <div key={i} className="spread small"><span>{PJ().BY[e.exId] ? PJ().BY[e.exId].n : e.exId}</span><span className="num muted">{e.sets.filter(x => x.done).map(x => (x.w ? comma(x.w) + '×' : '') + x.r).join('  ')}</span></div>)}{!c.offline && <SessionComment c={c} h={h} />}</div>
           </motion.div>}</AnimatePresence>
         </div>)}</div>
       </div>}
@@ -417,6 +421,22 @@ export function Plans() {
           </div>
         </Item>))}</Stagger>
     </Page>
+  );
+}
+
+/* ---------- komentarz trenera do treningu podopiecznego ---------- */
+function SessionComment({ c, h }) {
+  const ctx = useApp();
+  const { toast } = useUI();
+  const cur = ((c.coach || {}).comments || {})[h.id];
+  const [t, setT] = useState(cur ? cur.t : ''), [em, setEm] = useState(cur ? cur.emoji : '💪');
+  const save = () => { const comments = Object.assign({}, (c.coach || {}).comments || {}); if (t.trim()) comments[h.id] = { t: t.trim(), emoji: em, at: new Date().toISOString() }; else delete comments[h.id]; const keys = Object.keys(comments); if (keys.length > 30) keys.slice(0, keys.length - 30).forEach(k => delete comments[k]); ctx.saveClient(c, { comments }).then(() => toast(t.trim() ? 'Komentarz wysłany' : 'Usunięto komentarz'), e => toast(e.message)); };
+  return (
+    <div className="stack" style={{ gap: 6, paddingTop: 8, borderTop: '1px dashed var(--line)', marginTop: 6 }} onClick={e => e.stopPropagation()}>
+      <span className="xs muted">Twój komentarz (podopieczny zobaczy go na ekranie Dziś)</span>
+      <div className="row" style={{ gap: 4 }}>{['💪', '🔥', '👏', '🏆', '⚠️'].map(x => <button key={x} className="chip" aria-pressed={em === x} onClick={() => setEm(x)}>{x}</button>)}</div>
+      <div className="row"><input id={'cm-' + h.id} type="text" value={t} onChange={e => setT(e.target.value)} placeholder="np. Świetna technika w przysiadzie, następnym razem +2,5 kg" style={{ flex: 1, minWidth: 180 }} /><button className="btn sm pri" onClick={save}><Send size={14} />Wyślij</button></div>
+    </div>
   );
 }
 

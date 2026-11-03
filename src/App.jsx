@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, MotionConfig } from 'framer-motion';
-import { Bell, Dumbbell, CalendarCheck, Sparkles, Apple, Trophy, Library, ClipboardList, LogOut, Mail, SunMoon, LayoutDashboard, Users, NotebookPen, User, TrendingUp, UserCog, CreditCard, FileText, WifiOff, BarChart3, ShieldCheck } from 'lucide-react';
+import { Bell, Dumbbell, CalendarCheck, Sparkles, Apple, Trophy, Library, ClipboardList, LogOut, Mail, SunMoon, LayoutDashboard, Users, NotebookPen, User, TrendingUp, UserCog, CreditCard, FileText, WifiOff, BarChart3, ShieldCheck, Search, Dumbbell as DumbbellIc } from 'lucide-react';
 import { api, MODE, normalize, isTrainer, access } from './lib/backend.js';
 import { applyCoach } from './lib/coach.js';
 import { Brand } from './components/Logo.jsx';
@@ -22,6 +22,7 @@ import Pricing, { StatusLine } from './views/Pricing.jsx';
 import { TermsPage, PrivacyPage } from './views/Legal.jsx';
 import { AdminAnalytics, AdminUsers } from './views/Admin.jsx';
 import { DietsLibrary, DietEditor } from './views/Diets.jsx';
+import Palette from './components/Palette.jsx';
 const Interview = () => <Onboarding repeat />;
 
 const Ctx = createContext(null);
@@ -37,7 +38,7 @@ const ROUTES = {
 const COACH_ROUTES = ['pulpit', 'podopieczni', 'plany', 'edytor', 'diety', 'dieta-edytor'];
 const ADMIN_ROUTES = ['admin', 'uzytkownicy'];
 const ADMIN_SIDE = ['admin', 'uzytkownicy', 'wiadomosci', 'konto'];
-const ME_DOCK = ['dzis', 'plan', 'trener', 'dieta', 'nagrody'];
+const ME_DOCK = ['plan', 'dieta', 'dzis', 'trener', 'nagrody'];
 const ME_SIDE = ['dzis', 'plan', 'trener', 'postepy', 'cwiczenia', 'dieta', 'nagrody', 'ankieta', 'wiadomosci', 'konto'];
 const FREE_ROUTES = ['cennik', 'konto', 'regulamin', 'prywatnosc'];
 const QKEY = 'pompujto:unsynced';
@@ -59,7 +60,8 @@ function Shell() {
   const [editor, setEditor] = useState(null);
   const [dietEditor, setDietEditor] = useState(null);
   const [lastMode, setLastMode] = useState('me');
-  const timer = useRef(null), pending = useRef(null), dataRef = useRef(null);
+  const timer = useRef(null), pending = useRef(null), dataRef = useRef(null), paletteRef = useRef(null);
+  useEffect(() => { const f = e => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); paletteRef.current && paletteRef.current(); } }; addEventListener('keydown', f); return () => removeEventListener('keydown', f); }, []);
   dataRef.current = data;
   const route = useRoute();
   const { modal, toast } = useUI();
@@ -82,7 +84,7 @@ function Shell() {
     const c = await api.myCoach().catch(() => null), d = dataRef.current;
     if (!c || !d) return;
     const seen = d.coachSeen || {};
-    if ((c.programV || 0) > (seen.programV || 0) || (c.profileV || 0) > (seen.profileV || 0) || (c.dietV || 0) > (seen.dietV || 0) || JSON.stringify(c.note || '') !== JSON.stringify((d._coach || {}).note || '')) {
+    if ((c.programV || 0) > (seen.programV || 0) || (c.profileV || 0) > (seen.profileV || 0) || (c.dietV || 0) > (seen.dietV || 0) || JSON.stringify(c.note || '') !== JSON.stringify((d._coach || {}).note || '') || JSON.stringify(c.comments || {}) !== JSON.stringify((d._coach || {}).comments || {})) {
       let msgs = [];
       update(x => { msgs = applyCoach(x, c); });
       setTimeout(() => msgs.forEach(toast), 50);
@@ -130,6 +132,7 @@ function Shell() {
     if (patch.profile) { out.profile = patch.profile; out.profileV = (c.profileV || 0) + 1; }
     if ('note' in patch) { out.note = patch.note; out.noteAt = new Date().toISOString(); }
     if (patch.diet) { out.diet = patch.diet; out.dietV = (c.dietV || 0) + 1; }
+    if (patch.comments) out.comments = patch.comments;
     await api.coachSet(client.id, out);
     setUsers(us => (us || []).map(u => u.id === client.id ? { ...u, coach: { ...u.coach, ...out } } : u));
   }, [update]);
@@ -173,6 +176,15 @@ function Shell() {
       {MODE === 'local' && <p className="xs muted">Tryb lokalny: konta są zapisane tylko w tej przeglądarce.</p>}
     </div>
   ));
+  const openPalette = () => {
+    const allowed = Object.keys(ROUTES).filter(k => !['edytor', 'dieta-edytor', 'wywiad'].includes(k) && (trainer || !COACH_ROUTES.includes(k)) && (isAdmin || !ADMIN_ROUTES.includes(k)));
+    const items = allowed.map(k => ({ group: 'Ekrany', label: ROUTES[k][0], href: '#' + k, I: ROUTES[k][1] }))
+      .concat(trainer ? clients.map(c => ({ group: 'Podopieczni', label: c.name, sub: c.offline ? 'bez konta' : c.email, href: '#p-' + c.id, I: User })) : [])
+      .concat(window.PJ.EX.map(e => ({ group: 'Ćwiczenia', label: e.n, sub: window.PJ.PATTERN[e.p], href: '#cwiczenia', I: DumbbellIc, run: () => setTimeout(() => { try { sessionStorage.setItem('pj:exq', e.n); } catch (er) { } dispatchEvent(new Event('pj-exq')); }, 50) })));
+    if (trainer && !users) reloadClients();
+    modal(close => <Palette items={items} close={close} />);
+  };
+  paletteRef.current = openPalette;
   const ModeSwitch = () => trainer ? (
     <div className="seg modeswitch" role="tablist" aria-label="Tryb">
       {[['me', 'Ja', '#dzis', User], ['coach', 'Trener', '#pulpit', Users], ...(isAdmin ? [['admin', 'Admin', '#admin', ShieldCheck]] : [])].map(([k, n, h, I]) => (
@@ -202,6 +214,7 @@ function Shell() {
           <header className="topbar">
             <Brand size={40} />
             <span className="sp" />
+            <button className="searchbtn hide-sm" onClick={openPalette} aria-label="Szukaj"><Search size={16} /><span>Szukaj</span><kbd>{/Mac/.test(navigator.platform) ? '⌘' : 'Ctrl'} K</kbd></button>
             <div className="top-mode"><ModeSwitch /></div>
             <a className="iconbtn" href="#wiadomosci" aria-label="Wiadomości"><Bell size={18} />{unread ? <span className="dot">{unread}</span> : null}</a>
             <button className="me" onClick={menu} aria-label="Menu konta"><span className="av">{initials}</span><span className="small hide-sm" style={{ fontWeight: 800 }}>Poz. {lvl.n}</span></button>
@@ -214,7 +227,7 @@ function Shell() {
       </div>
       <div className="dock"><nav aria-label="Nawigacja" style={{ gridTemplateColumns: `repeat(${dock.length}, 1fr)` }}>
         {dock.map(k => { const [n, I] = ROUTES[k]; return (
-          <a key={k} href={'#' + k} className={active(k) ? 'on' : ''}>
+          <a key={k} href={'#' + k} className={(active(k) ? 'on' : '') + (mode === 'me' && k === 'dzis' ? ' hero' : '')}>
             {active(k) && <motion.span layoutId="dock-pill" className="pill" transition={{ type: 'spring', damping: 30, stiffness: 380 }} />}
             <I size={21} /><span>{n === 'Trener AI' ? 'Trener' : n}</span>
           </a>); })}

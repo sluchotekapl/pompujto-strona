@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
-import { Play, Check, Plus, Repeat, Timer, Flame, Sparkles, Gift, Moon, Trophy } from 'lucide-react';
+import { Play, Check, Plus, Repeat, Timer, Flame, Sparkles, Gift, Moon, Trophy, Share2, MessageCircle } from 'lucide-react';
 import { useApp } from '../App.jsx';
 import { useUI, Anim, Bar, Ring, Page, Stagger, Item, ymd, fmtDate, comma } from '../components/ui.jsx';
 import { ExerciseSheet, SwapSheet } from '../components/exercise.jsx';
@@ -98,6 +98,8 @@ export default function Today() {
       </div>
       {!p.surveyDone && <div className="banner pink"><div><b>Uzupełnij ankietę (2 minuty)</b>Dopasuje ćwiczenia, intensywność i jedzenie do Twojego zdrowia.</div><a className="btn sm" href="#ankieta">Wypełnij</a></div>}
       {p._coach && p._coach.note && <div className="banner info"><div><b>Od trenera</b>{p._coach.note}</div></div>}
+      <CoachComments p={p} />
+      <WeeklyCheckin />
       {hero}
       <div className="cols">
         <div className="card stack">
@@ -137,6 +139,36 @@ export default function Today() {
 }
 
 /* ================= trening w toku ================= */
+// komentarze trenera do ostatnich treningów
+function CoachComments({ p }) {
+  const cm = (p._coach && p._coach.comments) || {};
+  const list = (p.history || []).filter(h => cm[h.id]).slice(-2).reverse();
+  if (!list.length) return null;
+  return list.map(h => <div key={h.id} className="banner info"><MessageCircle size={20} /><div><b>Trener o treningu „{h.dayName}” ({fmtDate(h.date)})</b>{cm[h.id].emoji ? cm[h.id].emoji + ' ' : ''}{cm[h.id].t}</div></div>);
+}
+
+// cotygodniowy check-in: samopoczucie, sen, energia, stres – widzi go trener
+export const CHECK = [['mood', 'Samopoczucie', ['😣', '😕', '😐', '🙂', '😄']], ['sleep', 'Sen', ['😵', '🥱', '😐', '😌', '😴']], ['energy', 'Energia', ['🪫', '😮‍💨', '😐', '⚡', '🚀']], ['hunger', 'Głód na diecie', ['😋', '🙂', '😐', '😟', '😫']]];
+function WeeklyCheckin() {
+  const { data: p, update } = useApp();
+  const { toast } = useUI();
+  const wk = PJ().weekKey(new Date());
+  const [f, setF] = useState({ mood: 0, sleep: 0, energy: 0, hunger: 0, note: '' }), [open, setOpen] = useState(false);
+  const done = (p.checkins || []).some(c => c.week === wk), dow = new Date().getDay();
+  if (done || !(dow === 0 || dow === 6 || dow === 1) || !p.history.length) return null;
+  const ok = CHECK.every(([k]) => f[k]);
+  const save = () => { update(x => { x.checkins = (x.checkins || []).concat({ week: wk, date: new Date().toISOString(), ...f, note: f.note.trim() }).slice(-52); x.rewards.xp = (x.rewards.xp || 0) + 25; }); burst(); toast('Check-in zapisany · +25 XP'); };
+  return (
+    <div className="card stack checkin">
+      <div className="spread"><div><p className="eyebrow">Podsumowanie tygodnia</p><h3>Jak minął tydzień?</h3></div>{!open && <button className="btn pri sm" onClick={() => setOpen(true)}>Check-in · +25 XP</button>}</div>
+      {open && <>
+        {CHECK.map(([k, n, em]) => <div key={k} className="stack" style={{ gap: 4 }}><span className="small" style={{ fontWeight: 700 }}>{n}</span><div className="emo">{em.map((e, i) => <motion.button whileTap={{ scale: .85 }} key={i} aria-pressed={f[k] === i + 1} aria-label={n + ' ' + (i + 1)} onClick={() => setF({ ...f, [k]: i + 1 })}>{e}</motion.button>)}</div></div>)}
+        <label className="f">Coś, co trener powinien wiedzieć? (opcjonalnie)<input id="ci-note" type="text" value={f.note} onChange={e => setF({ ...f, note: e.target.value })} placeholder="np. wyjazd w przyszłym tygodniu, mniej snu" /></label>
+        <button className="btn pri" disabled={!ok} onClick={save}><Check size={16} />Zapisz check-in</button></>}
+    </div>
+  );
+}
+
 function Workout() {
   const { data: p, update } = useApp();
   const { modal, toast } = useUI();
@@ -152,8 +184,14 @@ function Workout() {
   const total = d.entries.reduce((t, e) => t + e.sets.length, 0), done = d.entries.reduce((t, e) => t + e.sets.filter(s => s.done).length, 0);
   const mins = Math.round((Date.now() - new Date(d.startedAt)) / 60000);
   const setVal = (ei, si, k, v) => update(x => { const e = x.draft.entries[ei]; e.sets[si][k] = v; if (k === 'w' && si === 0) e.sets.forEach((s, j) => { if (j > 0 && !s.done) s.w = v; }); });
+  const last = id => { for (let i = p.history.length - 1; i >= 0; i--) { const e = p.history[i].entries.find(x => x.exId === id); if (e) return { date: p.history[i].date, sets: e.sets.filter(x => x.done) }; } return null; };
   const toggle = (ei, si) => {
     const e = d.entries[ei], s = e.sets[si], willDone = !s.done;
+    if (willDone && +s.w > 0) {
+      const top = PJ().e1rm(+s.w, +(s.r || e.target.repMax)), best = PJ().bestBefore(e.exId, p.history);
+      const already = e.sets.some((x, j) => j !== si && x.done && +x.w > 0 && PJ().e1rm(+x.w, +x.r) >= top);
+      if (best > 0 && top > best + .01 && !already) { burst(); toast('🏆 Nowy rekord: ' + PJ().BY[e.exId].n + ' – ' + comma(+s.w) + ' kg × ' + (s.r || e.target.repMax)); }
+    }
     update(x => { const ss = x.draft.entries[ei].sets[si]; if (!ss.done && ss.r === '') ss.r = String(e.target.repMax); ss.done = !ss.done; });
     if (willDone) setRest({ end: Date.now() + e.target.rest * 1000, len: e.target.rest });
   };
@@ -180,6 +218,7 @@ function Workout() {
               <div className="rx"><span><b>{t.sets} × {amount(t)}</b> {t.unit === 'r' ? 'powt.' : ''}</span><span>RPE <b>{t.rpe}</b></span><span>Przerwa <b>{restTxt(t.rest)}</b></span></div>
               {e.coachNote && <p className="note" style={{ color: 'var(--ink)' }}><b>Trener:</b> {e.coachNote}</p>}
               {e.note && <p className="note">{e.note}</p>}
+              {(() => { const l = last(e.exId); return l && l.sets.length ? <p className="xs muted lastperf">Ostatnio ({new Date(l.date).toLocaleDateString('pl-PL', { day: 'numeric', month: 'short' })}): <b className="num">{l.sets.map(x => (x.w ? comma(x.w) + '×' : '') + x.r).join('  ')}</b></p> : null; })()}
               {ex.eq === 'barbell' && w > 20 && <Plates w={w} />}
             </div></div>
             <div className="sets"><div className="sethead"><span>#</span><span>kg</span><span>{lab}</span><span>✓</span></div>
@@ -254,7 +293,30 @@ function Celebrate({ s, p, prs, nb, lvUp, close }) {
       {nb.map(b => <motion.div key={b.id} className="bd got" style={{ justifyItems: 'center' }} initial={{ rotate: -8, scale: .6 }} animate={{ rotate: 0, scale: 1 }}><span className="ic">{b.ic}</span><b>{b.n}</b><span>{b.d}</span></motion.div>)}
       {tip !== '' && <div className="card tight stack" style={{ textAlign: 'left', width: '100%' }}><span className="ai-badge"><Sparkles size={12} />Trener AI</span>{tip ? <p className="small">{tip}</p> : <p className="typing"><span /><span /><span /></p>}</div>}
       <div className="banner pink" style={{ width: '100%', textAlign: 'left' }}><Gift size={22} /><div><b>Masz obrót kołem nagród!</b>Wylosuj bonusowe XP albo nawet posiłek-nagrodę.</div><a className="btn pri sm" href="#nagrody" onClick={close}>Kręć</a></div>
-      <button className="btn" onClick={close}>Zamknij</button>
+      <div className="row" style={{ justifyContent: 'center' }}><button className="btn" onClick={() => shareCard(s, p, prs)}><Share2 size={16} />Udostępnij wynik</button><button className="btn" onClick={close}>Zamknij</button></div>
     </div>
   );
+}
+
+// karta 1080×1350 do Stories / WhatsApp – rysowana na canvasie
+async function shareCard(s, p, prs) {
+  const c = document.createElement('canvas'); c.width = 1080; c.height = 1350; const g = c.getContext('2d');
+  const grd = g.createLinearGradient(0, 0, 1080, 1350); grd.addColorStop(0, '#1a0f1f'); grd.addColorStop(1, '#0f0d14'); g.fillStyle = grd; g.fillRect(0, 0, 1080, 1350);
+  g.fillStyle = 'rgba(255,77,109,.18)'; g.beginPath(); g.arc(920, 160, 320, 0, 7); g.fill();
+  g.fillStyle = '#fff'; g.font = '900 64px Unbounded, Arial Black, sans-serif'; g.fillText('pompujto', 80, 150); g.fillStyle = '#ff4d6d'; g.fillText('.pl', 80 + g.measureText('pompujto').width, 150);
+  g.fillStyle = '#a59db2'; g.font = '700 38px Manrope, Arial, sans-serif'; g.fillText(new Date(s.date).toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' }), 80, 230);
+  g.fillStyle = '#fff'; g.font = '900 92px Unbounded, Arial Black, sans-serif'; g.fillText((s.dayName || 'Trening').slice(0, 16), 80, 380);
+  const sets = s.entries.reduce((t, e) => t + e.sets.filter(x => x.done).length, 0), vol = Math.round(PJ().volume(s));
+  [['OBJĘTOŚĆ', vol.toLocaleString('pl-PL') + ' kg'], ['SERIE', String(sets)], ['CZAS', s.durationMin + ' min'], ['XP', '+' + s.xp]].forEach(([k, v], i) => {
+    const x = 80 + (i % 2) * 470, y = 520 + Math.floor(i / 2) * 230;
+    g.fillStyle = 'rgba(255,255,255,.06)'; g.beginPath(); g.roundRect(x, y, 440, 200, 32); g.fill();
+    g.fillStyle = '#a59db2'; g.font = '800 30px Manrope, Arial, sans-serif'; g.fillText(k, x + 36, y + 64);
+    g.fillStyle = i === 3 ? '#ffc23d' : '#fff'; g.font = '900 72px Unbounded, Arial Black, sans-serif'; g.fillText(v, x + 36, y + 160);
+  });
+  if (prs.length) { g.fillStyle = '#2ee6a6'; g.font = '800 42px Manrope, Arial, sans-serif'; g.fillText('🏆 Rekordy: ' + prs.map(i => PJ().BY[i].n).join(', ').slice(0, 40), 80, 1060); }
+  g.fillStyle = '#6f6780'; g.font = '700 34px Manrope, Arial, sans-serif'; g.fillText('Seria: ' + PJ().weekStreak(p, p.history) + ' tyg. z rzędu · ' + p.history.length + ' treningów', 80, 1250);
+  const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+  const file = new File([blob], 'pompujto-trening.png', { type: 'image/png' });
+  try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: 'Mój trening – Pompujto.pl' }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'pompujto-trening.png'; document.body.appendChild(a); a.click(); a.remove();
 }
