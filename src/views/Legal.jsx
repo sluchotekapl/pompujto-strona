@@ -10,7 +10,7 @@ export function Terms() {
     <div className="stack legal">
       <p className="xs muted">Wersja z {UPDATED}</p>
       <h3>1. Kto prowadzi serwis</h3>
-      <p>Serwis pompujto.pl (strona i aplikacja) prowadzi {c.name}, {c.address}, NIP {c.nip}, kontakt: {c.email} („Usługodawca”).</p>
+      <p>Serwis pompujto.pl (strona i aplikacja) prowadzi {c.name}, {c.address}{c.nip ? ', NIP ' + c.nip : ''}, kontakt: {c.email} („Usługodawca”).</p>
       <h3>2. Czym jest Pompujto</h3>
       <p>Narzędzie do planowania treningów, diety i śledzenia postępów. Plany układa algorytm, Trener AI albo trener prowadzący. <b>Pompujto nie jest usługą medyczną</b> i nie zastępuje lekarza, fizjoterapeuty ani dietetyka. Przy chorobach, ciąży, bólu w klatce, zawrotach głowy lub kontuzji skonsultuj się ze specjalistą przed treningiem i przerwij ćwiczenie, gdy coś boli.</p>
       <h3>3. Konta</h3>
