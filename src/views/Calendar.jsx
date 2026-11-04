@@ -98,6 +98,6 @@ export function ClientCalendar({ c }) {
 // Podopieczny: treningi z kalendarza, które serwer już udostępnił
 export function useMyWorkouts(enabled) {
   const [list, setList] = useState([]), [state, setState] = useState('idle');
-  useEffect(() => { if (!enabled) return; setState('loading'); api.myWorkouts().then(w => { setList((w || []).filter(workoutVisible)); setState('ok'); }, () => setState('error')); }, [enabled]);
+  useEffect(() => { if (!enabled) return; setState('loading'); api.myWorkouts().then(w => { setList((w || []).filter(workoutVisible)); setState('ok'); }, e => setState(/aktualizacji bazy/.test(e.message) ? 'missing' : 'error')); }, [enabled]);
   return { list, state };
 }
