@@ -42,7 +42,7 @@ export default function Account() {
   useEffect(() => { if (!tr && me.coach_id) api.contacts().then(cs => { const c = cs.find(x => x.id === me.coach_id); setCoachName(c ? c.name : 'Twój trener'); }).catch(() => { }); }, [me.coach_id]);
 
   const join = async () => {
-    try { const n = await api.joinCoach(code); toast('Dołączono do: ' + n); setCode(''); setMe(await api.session()); } catch (e) { toast(e.message); }
+    try { const n = /^[0-9a-f]{32}$/i.test(code.trim()) ? await api.redeemInvite(code.trim()) : await api.joinCoach(code); toast('Dołączono do: ' + n); setCode(''); setMe(await api.session()); } catch (e) { toast(e.message); }
   };
   const leave = () => modal(close => <div className="stack"><h2>Odejść od trenera?</h2><p className="small">Trener przestanie widzieć Twoje treningi i nie będzie mógł zmieniać Ci planu. Twoje dane zostają.</p>
     <div className="row"><button className="btn danger" onClick={async () => { close(); try { await api.leaveCoach(); setMe(await api.session()); setCoachName(null); toast('Odłączono od trenera'); } catch (e) { toast(e.message); } }}><UserMinus size={16} />Tak, odłącz</button><button className="btn" onClick={close}>Anuluj</button></div></div>);
@@ -71,7 +71,7 @@ export default function Account() {
           </div> : <div className="card stack"><h3>Mój trener</h3>
             {me.coach_id ? <><p className="small">Prowadzi Cię: <b>{coachName || '…'}</b>. Widzi Twoje treningi i może zmieniać plan.</p><button className="btn" onClick={leave}><UserMinus size={16} />Odłącz się od trenera</button></>
               : <><p className="small muted">Masz trenera na Pompujto? Wpisz jego kod – dostaniesz plany od niego, a abonament pokrywa trener.</p>
-                <div className="row"><input id="join-code" value={code} onChange={e => setCode(e.target.value.toUpperCase())} placeholder="np. 7F3K9Q" maxLength={12} style={{ flex: 1, minWidth: 120 }} aria-label="Kod trenera" /><button className="btn pri" disabled={code.trim().length < 4} onClick={join}><UserPlus size={16} />Dołącz</button></div></>}
+                <div className="row"><input id="join-code" value={code} onChange={e => setCode(e.target.value.trim())} placeholder="kod trenera albo kod zaproszenia" maxLength={40} style={{ flex: 1, minWidth: 120 }} aria-label="Kod trenera" /><button className="btn pri" disabled={code.trim().length < 4} onClick={join}><UserPlus size={16} />Dołącz</button></div></>}
           </div>}
           <InstallCard />
         </div>

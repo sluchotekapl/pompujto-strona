@@ -45,6 +45,10 @@ export function access(me) {
   const daysLeft = Math.max(0, Math.ceil(((state === 'active' && until ? until : trialEnd) - now) / 864e5));
   return { state, daysLeft, ok: !enforce || state !== 'expired', enforce, plan: isTrainer(me) ? 'trainer' : 'user' };
 }
+// Reguła dostępności treningu z kalendarza (lustro funkcji workout_visible w bazie – w chmurze decyduje serwer)
+export const todayIn = (tz = 'Europe/Warsaw') => new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+export const workoutVisible = w => w.status === 'published' && w.scheduled_date <= todayIn(w.tz) && (!w.available_at || new Date(w.available_at) <= new Date());
+const need4 = e => { if (e && /workouts|workout_logs|invites|redeem_invite|does not exist|schema cache/i.test(e.message)) throw new Error('Brakuje aktualizacji bazy: uruchom w Supabase plik aktualizacja-4-kalendarz-zaproszenia.sql.'); if (e) throw new Error(e.message); };
 const code6 = () => Math.random().toString(36).slice(2, 8).toUpperCase().padEnd(6, 'X');
 
 /* ---------------- tryb lokalny ---------------- */
@@ -104,12 +108,15 @@ const local = {
     if (Object.values(db.users).some(x => x.email.toLowerCase() === e)) throw new Error('Takie konto już istnieje. Zaloguj się.');
     const hasAdmin = Object.values(db.users).some(u => u.role === 'admin');
     const inv = (invite || '').trim().toUpperCase();
-    const tr = inv && Object.values(db.users).find(u => (u.trainer_code || '') === inv && u.role !== 'user');
+    const tokInv = inv && (db.invites || []).find(x => x.token === inv.toLowerCase());
+    if (tokInv && (tokInv.used_at || new Date(tokInv.expires_at) < new Date())) throw new Error('Zaproszenie wygasło albo zostało już użyte');
+    const tr = tokInv ? db.users[tokInv.trainer_id] : inv && Object.values(db.users).find(u => (u.trainer_code || '') === inv && u.role !== 'user');
     if (hasAdmin && !tr && db.settings.invite_code && inv !== db.settings.invite_code.toUpperCase()) throw new Error('Nieprawidłowy kod zaproszenia lub kod trenera.');
     const id = uid(), k = kind === 'trainer' ? 'trainer' : 'user';
     const role = !hasAdmin ? 'admin' : k === 'trainer' ? 'trainer' : 'user';
     db.users[id] = { id, coach_id: tr ? tr.id : null, coach: {}, email: email.trim(), name: name.trim(), role, kind: role === 'user' ? 'user' : 'trainer', trainer_code: role === 'user' ? null : code6(), billing: {}, consents: consents || {}, pass: await hash(password), data: normalize(blankData(), id, name.trim()), created_at: new Date().toISOString() };
     db.users[id].data.program = PJ().buildProgram(db.users[id].data, []);
+    if (tokInv) { tokInv.used_by = id; tokInv.used_at = new Date().toISOString(); }
     db.session = id; lwrite(db); return this.session();
   },
   async signOut() { const db = await ldb(); db.session = null; lwrite(db); },
@@ -140,7 +147,21 @@ const local = {
   async admins() { const db = await ldb(); return Object.values(db.users).filter(u => u.role === 'admin').map(u => ({ id: u.id, name: u.name })); },
   async getInvite() { const db = await ldb(); return db.settings.invite_code || ''; },
   async setInvite(v) { const db = await ldb(); db.settings.invite_code = v; lwrite(db); },
-  async token() { return null; }
+  async token() { return null; },
+  // --- kalendarz (tryb lokalny: demonstracja, ta sama reguła widoczności co w bazie) ---
+  async listWorkouts(clientId) { const db = await ldb(); return (db.workouts || []).filter(w => w.client_id === clientId).sort((a, b) => a.scheduled_date < b.scheduled_date ? 1 : -1); },
+  async myWorkouts() { const db = await ldb(); return (db.workouts || []).filter(w => w.client_id === db.session && workoutVisible(w)).sort((a, b) => a.scheduled_date < b.scheduled_date ? 1 : -1); },
+  async saveWorkout(w) { const db = await ldb(); db.workouts = db.workouts || []; w = Object.fromEntries(Object.entries(w).filter(([, v]) => v !== undefined)); const i = db.workouts.findIndex(x => x.id === w.id); const now = new Date().toISOString();
+    if (i >= 0) { const old = db.workouts[i]; db.workouts[i] = { ...old, ...w, version: JSON.stringify(old.content) !== JSON.stringify(w.content || old.content) ? old.version + 1 : old.version, updated_at: now }; }
+    else db.workouts.push({ id: 'w' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), tz: 'Europe/Warsaw', status: 'draft', version: 1, trainer_id: db.session, created_at: now, updated_at: now, ...w });
+    lwrite(db); },
+  async deleteWorkout(id) { const db = await ldb(); db.workouts = (db.workouts || []).filter(w => w.id !== id); lwrite(db); },
+  async logWorkout(l) { const db = await ldb(); db.logs = db.logs || []; const i = db.logs.findIndex(x => x.client_id === db.session && x.client_key === l.client_key); const row = { ...l, client_id: db.session }; if (i >= 0) db.logs[i] = { ...db.logs[i], ...row }; else db.logs.push({ ...row, created_at: new Date().toISOString() }); lwrite(db); },
+  async listLogs(clientId) { const db = await ldb(); return (db.logs || []).filter(x => x.client_id === clientId); },
+  async createInvite(label) { const db = await ldb(); db.invites = db.invites || []; const token = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now()).replace(/-/g, ''); db.invites.push({ token, trainer_id: db.session, label: label || '', expires_at: new Date(Date.now() + 7 * 864e5).toISOString(), used_by: null, used_at: null, created_at: new Date().toISOString() }); lwrite(db); return token; },
+  async listInvites() { const db = await ldb(); return (db.invites || []).filter(x => x.trainer_id === db.session).slice().reverse(); },
+  async deleteInvite(t) { const db = await ldb(); db.invites = (db.invites || []).filter(x => !(x.token === t && !x.used_at)); lwrite(db); },
+  async redeemInvite(t) { const db = await ldb(); const r = (db.invites || []).find(x => x.token === String(t).trim().toLowerCase()); if (!r) throw new Error('Nie ma takiego zaproszenia'); if (r.used_at) throw new Error('To zaproszenie zostało już użyte'); if (new Date(r.expires_at) < new Date()) throw new Error('Zaproszenie wygasło – poproś trenera o nowe'); if (r.trainer_id === db.session) throw new Error('To Twoje własne zaproszenie'); db.users[db.session].coach_id = r.trainer_id; r.used_by = db.session; r.used_at = new Date().toISOString(); lwrite(db); return db.users[r.trainer_id].name; }
 };
 
 /* ---------------- Supabase ---------------- */
@@ -194,7 +215,19 @@ const cloud = {
   async deleteMe() { const c = await sb(); const { error } = await c.rpc('delete_me'); need3(error); await c.auth.signOut(); },
   async getInvite() { const c = await sb(); const { data } = await c.from('app_settings').select('value').eq('key', 'invite_code').maybeSingle(); return (data && data.value) || ''; },
   async setInvite(v) { const c = await sb(); const { error } = await c.from('app_settings').upsert({ key: 'invite_code', value: v }); err(error); },
-  async token() { const c = await sb(); const { data } = await c.auth.getSession(); return data.session ? data.session.access_token : null; }
+  async token() { const c = await sb(); const { data } = await c.auth.getSession(); return data.session ? data.session.access_token : null; },
+  // --- kalendarz: widoczność dla podopiecznego egzekwuje RLS (workout_visible), nie przeglądarka ---
+  async listWorkouts(clientId) { const c = await sb(); const { data, error } = await c.from('workouts').select('*').eq('client_id', clientId).order('scheduled_date', { ascending: false }).limit(200); need4(error); return data; },
+  async myWorkouts() { const c = await sb(); const { data: s } = await c.auth.getSession(); const { data, error } = await c.from('workouts').select('id,title,content,scheduled_date,status,version,tz,available_at').eq('client_id', s.session.user.id).order('scheduled_date', { ascending: false }).limit(30); need4(error); return data; },
+  async saveWorkout(w) { const c = await sb(); const { data: s } = await c.auth.getSession(); const row = { client_id: w.client_id, scheduled_date: w.scheduled_date, available_at: w.available_at || null, status: w.status, title: w.title, content: w.content };
+    const q = w.id ? c.from('workouts').update(row).eq('id', w.id) : c.from('workouts').insert({ ...row, trainer_id: s.session.user.id }); const { error } = await q; need4(error); },
+  async deleteWorkout(id) { const c = await sb(); const { error } = await c.from('workouts').delete().eq('id', id); need4(error); },
+  async logWorkout(l) { const c = await sb(); const { data: s } = await c.auth.getSession(); const { error } = await c.from('workout_logs').upsert({ ...l, client_id: s.session.user.id }, { onConflict: 'client_id,client_key' }); need4(error); },
+  async listLogs(clientId) { const c = await sb(); const { data, error } = await c.from('workout_logs').select('workout_id,client_key,finished_at,result').eq('client_id', clientId).limit(200); need4(error); return data; },
+  async createInvite(label) { const c = await sb(); const { data: s } = await c.auth.getSession(); const { data, error } = await c.from('invites').insert({ trainer_id: s.session.user.id, label: label || null }).select('token').single(); need4(error); return data.token; },
+  async listInvites() { const c = await sb(); const { data, error } = await c.from('invites').select('*').order('created_at', { ascending: false }).limit(50); need4(error); return data; },
+  async deleteInvite(t) { const c = await sb(); const { error } = await c.from('invites').delete().eq('token', t); need4(error); },
+  async redeemInvite(t) { const c = await sb(); const { data, error } = await c.rpc('redeem_invite', { tok: t }); need4(error); return data; }
 };
 
 export const api = MODE === 'cloud' ? cloud : local;

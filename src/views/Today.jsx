@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import { Play, Check, Plus, Repeat, Timer, Flame, Sparkles, Gift, Moon, Trophy, Share2, MessageCircle } from 'lucide-react';
 import { useApp } from '../App.jsx';
+import { useMyWorkouts } from './Calendar.jsx';
+import { api, todayIn } from '../lib/backend.js';
 import { useUI, Anim, Bar, Ring, Page, Stagger, Item, ymd, fmtDate, comma } from '../components/ui.jsx';
 import { ExerciseSheet, SwapSheet } from '../components/exercise.jsx';
 import { RewardCard } from './Rewards.jsx';
@@ -42,7 +44,8 @@ export function WeekStrip({ p }) {
 }
 
 export default function Today() {
-  const { data: p, update } = useApp();
+  const { data: p, update, me } = useApp();
+  const cal = useMyWorkouts(!!(me && me.coach_id));
   const { modal } = useUI();
   const [rd, setRd] = useState({ sleep: 1, energy: 1, pain: 0 });
   const [force, setForce] = useState(false);
@@ -60,6 +63,17 @@ export default function Today() {
     update(d => {
       d.draft = { startedAt: new Date().toISOString(), dayIndex: ses.dayIndex, dayKey: ses.dayKey, dayName: ses.dayName, readiness: { ...rd }, phase: ses.phase.key, cardio: ses.cardio, cardioDone: false,
         entries: ses.items.map(it => ({ exId: it.exId, slot: it.slot, target: it.target, note: it.note, coachNote: it.coachNote, first: it.first, sets: Array.from({ length: it.target.sets }, () => ({ w: it.w != null ? it.w : '', r: '', done: false })) })) };
+    });
+    try { navigator.wakeLock && navigator.wakeLock.request('screen').catch(() => { }); } catch (e) { }
+    scrollTo(0, 0);
+  };
+  const todayW = cal.list.find(w => w.scheduled_date === todayIn(w.tz) && !p.history.some(h => h.workoutId === w.id));
+  const startCal = w => {
+    const prog = { id: 'cal-' + w.id, tid: w.content.tid || 'coach', name: w.content.planName || w.title, coach: true, days: [w.content.day] };
+    const cs = PJ().buildSession(p, prog, p.history, { readiness: rd, dayIndex: 0 });
+    update(d => {
+      d.draft = { startedAt: new Date().toISOString(), workoutId: w.id, workoutVersion: w.version, clientKey: 'w-' + w.id, prescription: w.content, dayIndex: 0, dayKey: cs.dayKey, dayName: w.title, readiness: { ...rd }, phase: cs.phase.key, cardio: null, cardioDone: false,
+        entries: cs.items.map(it => ({ exId: it.exId, slot: it.slot, target: it.target, note: it.note, coachNote: it.coachNote, first: it.first, sets: Array.from({ length: it.target.sets }, () => ({ w: it.w != null ? it.w : '', r: '', done: false })) })) };
     });
     try { navigator.wakeLock && navigator.wakeLock.request('screen').catch(() => { }); } catch (e) { }
     scrollTo(0, 0);
@@ -99,6 +113,9 @@ export default function Today() {
       {!p.surveyDone && <div className="banner pink"><div><b>Uzupełnij ankietę (2 minuty)</b>Dopasuje ćwiczenia, intensywność i jedzenie do Twojego zdrowia.</div><a className="btn sm" href="#ankieta">Wypełnij</a></div>}
       {p._coach && p._coach.note && <div className="banner info"><div><b>Od trenera</b>{p._coach.note}</div></div>}
       <CoachComments p={p} />
+      {todayW && <div className="card stack calcard"><div className="spread"><div><p className="eyebrow">Trening od trenera na dziś</p><h2>{todayW.title}</h2></div><button className="btn pri big" onClick={() => startCal(todayW)}><Play size={18} />Zaczynamy</button></div>
+        <p className="small muted">{(todayW.content.day.slots || []).map(s => PJ().BY[s.exId] ? PJ().BY[s.exId].n : '').filter(Boolean).join(' · ')}</p></div>}
+      {cal.state === 'error' && me && me.coach_id && <div className="banner bad"><div><b>Nie udało się pobrać treningów od trenera</b>Sprawdź internet i odśwież stronę. Plan rotacyjny poniżej działa normalnie.</div></div>}
       <WeeklyCheckin />
       {hero}
       <div className="cols">
@@ -196,7 +213,7 @@ function Workout() {
     if (willDone) setRest({ end: Date.now() + e.target.rest * 1000, len: e.target.rest });
   };
   const swap = ei => modal(c => <SwapSheet p={p} dayIndex={d.dayIndex} slotIndex={d.entries[ei].slot} modal={modal} close={c} onPick={id => update(x => {
-    x.program.days[d.dayIndex].slots[d.entries[ei].slot].exId = id; const e = x.draft.entries[ei]; e.exId = id; e.note = 'Zamienione – dobierz ciężar.'; e.sets.forEach(s => { if (!s.done) s.w = ''; });
+    if (!x.draft.workoutId) x.program.days[d.dayIndex].slots[d.entries[ei].slot].exId = id; const e = x.draft.entries[ei]; e.exId = id; e.note = 'Zamienione – dobierz ciężar.'; e.sets.forEach(s => { if (!s.done) s.w = ''; });
   })} />);
   const finish = () => modal(close => <Finish close={close} />);
   const abort = () => modal(close => <div className="stack"><h2>Porzucić trening?</h2><p>Wpisane serie nie zostaną zapisane.</p><div className="row"><button className="btn danger" onClick={() => { update(x => { x.draft = null; }); close(); }}>Tak, porzuć</button><button className="btn" onClick={close}>Wróć</button></div></div>);
@@ -252,7 +269,7 @@ function beep() { try { const a = new (window.AudioContext || window.webkitAudio
 
 function Finish({ close }) {
   const { data: p, update } = useApp();
-  const { modal } = useUI();
+  const { modal, toast } = useUI();
   const [feel, setFeel] = useState(3), [pain, setPain] = useState('');
   const F = ['Lekko', 'Spokojnie', 'W sam raz', 'Ciężko', 'Na maksa'];
   const save = () => {
@@ -260,10 +277,11 @@ function Finish({ close }) {
     const entries = d.entries.map(e => ({ exId: e.exId, target: e.target, hard: feel >= 5, sets: e.sets.map(s => ({ w: s.w === '' ? 0 : +s.w, r: s.r === '' ? 0 : +s.r, done: s.done })) })).filter(e => e.sets.some(s => s.done));
     const prs = [];
     entries.forEach(e => { const best = PJ().bestBefore(e.exId, p.history); const top = Math.max(0, ...e.sets.filter(s => s.done && s.w > 0).map(s => PJ().e1rm(s.w, s.r))); if (best > 0 && top > best + .01) prs.push(e.exId); });
-    const s = { id: 's' + Date.now().toString(36), date: new Date().toISOString(), startedAt: d.startedAt, programId: p.program.id, tid: p.program.tid, dayKey: d.dayKey, dayName: d.dayName, phase: d.phase, feeling: feel, painNote: pain.trim() || null, readiness: d.readiness, cardioDone: d.cardioDone, entries, prs, durationMin: Math.round((Date.now() - new Date(d.startedAt)) / 60000) };
+    const s = { id: 's' + Date.now().toString(36), date: new Date().toISOString(), startedAt: d.startedAt, programId: d.workoutId ? 'calendar' : p.program.id, tid: d.workoutId ? 'coach' : p.program.tid, workoutId: d.workoutId || undefined, dayKey: d.dayKey, dayName: d.dayName, phase: d.phase, feeling: feel, painNote: pain.trim() || null, readiness: d.readiness, cardioDone: d.cardioDone, entries, prs, durationMin: Math.round((Date.now() - new Date(d.startedAt)) / 60000) };
     s.xp = PJ().sessionXP(s, prs.length) + (d.cardioDone ? 20 : 0);
     const after = structuredClone(p); after.history.push(s); after.draft = null;
     update(x => { x.history.push(s); x.draft = null; });
+    if (d.workoutId) queueLog({ workout_id: d.workoutId, client_key: d.clientKey, workout_version: d.workoutVersion, prescription: d.prescription || {}, result: { entries, feeling: feel, pain: s.painNote, durationMin: s.durationMin }, started_at: d.startedAt, finished_at: s.date }, toast);
     close(); scrollTo(0, 0); burst();
     const nb = PJ().badges(after, after).filter(b => b.got && !beforeB.includes(b.id)), lv = PJ().level(PJ().totalXP(after));
     modal(c => <Celebrate s={s} p={after} prs={prs} nb={nb} lvUp={lv.n > lvB ? lv : null} close={c} />);
@@ -320,3 +338,19 @@ async function shareCard(s, p, prs) {
   try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: 'Mój trening – Pompujto.pl' }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'pompujto-trening.png'; document.body.appendChild(a); a.click(); a.remove();
 }
+
+// Zapis wykonania treningu z kalendarza: idempotentny (klucz client_key), z kolejką ponowień przy braku sieci.
+const LQ = 'pompujto:logq';
+export function queueLog(l, toast) {
+  let q = []; try { q = JSON.parse(localStorage.getItem(LQ) || '[]'); } catch (e) { }
+  q = q.filter(x => x.client_key !== l.client_key).concat(l); try { localStorage.setItem(LQ, JSON.stringify(q)); } catch (e) { }
+  flushLogs(toast);
+}
+export async function flushLogs(toast) {
+  let q = []; try { q = JSON.parse(localStorage.getItem(LQ) || '[]'); } catch (e) { }
+  for (const l of q) {
+    try { await api.logWorkout(l); q = q.filter(x => x.client_key !== l.client_key); try { localStorage.setItem(LQ, JSON.stringify(q)); } catch (e) { } if (toast) toast('Wykonanie zapisane u trenera ✓'); }
+    catch (e) { if (toast) toast(navigator.onLine ? 'Nie zapisano u trenera: ' + e.message + ' – spróbuję ponownie.' : 'Brak internetu – wykonanie wyślę, gdy wróci zasięg.'); break; }
+  }
+}
+if (typeof window !== 'undefined') { addEventListener('online', () => flushLogs()); setTimeout(() => flushLogs(), 4000); }

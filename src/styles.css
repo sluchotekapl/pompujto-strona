@@ -427,3 +427,8 @@ html { scroll-padding-top: 90px; scroll-padding-bottom: 200px }
 @media (max-width: 760px) { .sheet::before { content: ""; display: block; width: 42px; height: 5px; border-radius: 9px; background: var(--line2); margin: -8px auto 10px } }
 @media (max-width: 900px) { .searchbtn { display: none } }
 .pal-in { padding-right: 52px }
+.calrow { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--line) }
+.calrow:first-of-type { border-top: 0 }
+.caldate { display: grid; justify-items: center; min-width: 52px; padding: 6px 4px; border-radius: 12px; background: var(--raised); line-height: 1.1 }
+.caldate b { font-size: 1.3rem; font-variant-numeric: tabular-nums } .caldate span { font-size: .68rem; color: var(--muted); text-transform: uppercase }
+.calcard { border-color: color-mix(in srgb, var(--pink) 45%, var(--line)); background: linear-gradient(135deg, var(--pink-soft), var(--surface) 60%) }

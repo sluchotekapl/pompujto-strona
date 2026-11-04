@@ -10,6 +10,7 @@ import { AiPlanSheet } from './Plan.jsx';
 import { SurveyForm } from './Profile.jsx';
 import { LineChart } from './Rewards.jsx';
 import { ProgressBody } from './Progress.jsx';
+import { ClientCalendar } from './Calendar.jsx';
 import { CHECK } from './Today.jsx';
 import { CoachDietCard, NewDietSheet, BriefForm, assignDiet } from './Diets.jsx';
 import { inviteLink } from './Account.jsx';
@@ -85,19 +86,24 @@ export function SendSheet({ users, close, onSent, preset }) {
 function InviteBox() {
   const { toast } = useUI();
   const { me, isAdmin } = useApp();
-  const [invite, setInvite] = useState('');
-  useEffect(() => { if (isAdmin) api.getInvite().then(setInvite).catch(() => { }); }, []);
-  const code = me.trainer_code;
-  const link = code ? inviteLink(code) : location.origin + location.pathname.replace(/index\.html$/, '');
-  const txt = `Hej! Zapraszam Cię do pompujto.pl – będę Twoim trenerem. Dostaniesz plan treningowy na każdy dzień, dietę i nagrody za sumienny tydzień. Dla Ciebie za darmo.\nWejdź i załóż konto: ${link}${code ? `\n(kod trenera: ${code})` : ''}`;
+  const [invite, setInvite] = useState(''), [list, setList] = useState(null), [err, setErr] = useState('');
+  const base = location.origin + location.pathname.replace(/index\.html$/, '');
+  const load = () => api.listInvites().then(setList, e => { setErr(e.message); setList([]); });
+  useEffect(() => { load(); if (isAdmin) api.getInvite().then(setInvite).catch(() => { }); }, []);
+  const make = async () => {
+    try { const t = await api.createInvite(''); const link = base + '?zaproszenie=' + t; await copyText(`Hej! Zapraszam Cię do pompujto.pl – będę Twoim trenerem. Dla Ciebie za darmo.\nZałóż konto z tego linku (działa 7 dni, jednorazowo): ${link}`, toast); load(); }
+    catch (e) { toast(e.message); }
+  };
+  const status = x => x.used_at ? ['użyte', 'mint'] : new Date(x.expires_at) < new Date() ? ['wygasło', 'red'] : ['aktywne do ' + fmtDate(x.expires_at), 'sky'];
   return (
     <div className="stack">
-      <p className="small muted">Wyślij to na Messengerze, WhatsAppie albo SMS‑em. Po rejestracji z Twoim kodem osoba sama pojawi się na Twojej liście i korzysta za darmo.</p>
-      {code ? <div className="codebox num">{code}</div> : <div className="banner bad"><div className="small">Brak kodu trenera – administrator musi uruchomić aktualizację bazy nr 3.</div></div>}
-      <textarea id="invtxt" readOnly value={txt} onFocus={e => e.target.select()} />
-      <button className="btn pri" onClick={() => copyText(txt, toast)}><Copy size={16} />Kopiuj zaproszenie</button>
+      <p className="small muted">Każde zaproszenie to osobny link: działa jednorazowo i wygasa po 7 dniach. Po rejestracji osoba trafia na Twoją listę i korzysta za darmo.</p>
+      <button className="btn pri" onClick={make}><Copy size={16} />Utwórz zaproszenie i skopiuj link</button>
+      {err && <div className="banner bad"><div className="small">{err}</div></div>}
+      {list && list.length > 0 && <div className="stack" style={{ gap: 6 }}>{list.slice(0, 6).map(x => { const [t, tone] = status(x); return <div key={x.token} className="spread small"><span className="num xs">…{x.token.slice(-6)}</span><span className={'tag ' + tone}>{t}</span>{!x.used_at && <button className="btn sm ghost" onClick={() => api.deleteInvite(x.token).then(load, e => toast(e.message))}>Usuń</button>}</div>; })}</div>}
+      {me.trainer_code && <details><summary className="small" style={{ cursor: 'pointer', fontWeight: 700 }}>Stały kod trenera (wielokrotnego użytku)</summary><p className="xs muted">Kod {me.trainer_code} działa bez limitu czasu – podawaj go tylko zaufanym osobom. Bezpieczniejsze są jednorazowe zaproszenia powyżej.</p></details>}
       {isAdmin && <details className="stack"><summary className="small" style={{ cursor: 'pointer', fontWeight: 700 }}>Administrator: kod zamykający rejestrację</summary>
-        <p className="xs muted">Gdy ustawisz kod, bez niego (albo bez kodu trenera) nikt się nie zarejestruje. Puste = rejestracja otwarta – zalecane przy sprzedaży abonamentów.</p>
+        <p className="xs muted">Gdy ustawisz kod, bez niego (albo bez zaproszenia trenera) nikt się nie zarejestruje. Puste = rejestracja otwarta.</p>
         <div className="row"><input id="inv" type="text" value={invite} onChange={e => setInvite(e.target.value)} placeholder="puste = otwarta" style={{ flex: 1, minWidth: 150 }} aria-label="Kod zaproszenia" />
           <button className="btn" onClick={() => api.setInvite(invite.trim()).then(() => toast('Zapisano kod'), e => toast(e.message))}>Zapisz</button></div></details>}
     </div>
@@ -246,7 +252,7 @@ export function ClientDetail() {
   const assign = pr => assignPlan(ctx, c, pr, toast).then(ok => ok && ctx.reloadClients());
   const library = ctx.data.coachPlans || [];
   const fromLibrary = () => modal(close => <div className="stack"><h2>Plan z biblioteki</h2>{library.length ? library.map(pl => <button key={pl.id} className="treat" onClick={() => { close(); assign(pl); }}><span className="treat-ic"><NotebookPen size={18} /></span><span><b>{pl.name}</b><span className="xs muted">{pl.days.length} dni · {pl.days.reduce((t, x) => t + x.slots.length, 0)} ćwiczeń</span></span></button>) : <p className="muted">Biblioteka jest pusta. Utwórz plan w zakładce Plany.</p>}</div>);
-  const tabs = [['przeglad', 'Przegląd'], ['plan', 'Plan'], ['dieta', 'Dieta'], ['postepy', 'Postępy'], ['historia', 'Historia'], ['ankieta', 'Ankieta'], ['notatki', 'Notatki']];
+  const tabs = [['przeglad', 'Przegląd'], ['kalendarz', 'Kalendarz'], ['plan', 'Plan'], ['dieta', 'Dieta'], ['postepy', 'Postępy'], ['historia', 'Historia'], ['ankieta', 'Ankieta'], ['notatki', 'Notatki']];
   return (
     <Page>
       <a href="#podopieczni" className="btn ghost sm" style={{ justifySelf: 'start' }}><ChevronLeft size={16} />Podopieczni</a>
@@ -331,6 +337,7 @@ export function ClientDetail() {
       </div>}
 
       {tab === 'postepy' && <ProgressBody d={d} />}
+      {tab === 'kalendarz' && <ClientCalendar c={c} />}
 
       {tab === 'dieta' && (() => { const cd = coach.diet || d.coachDiet; const dl = ctx.data.coachDiets || []; return <div className="cols">
         <div className="stack">{cd ? <CoachDietCard diet={cd} who={c.name} coachName={ctx.data.name} compact /> : <div className="card empty"><b>Brak diety od Ciebie</b><span className="small">Podopieczny korzysta z automatycznego jadłospisu ({PJ().nutrition(d).kcal} kcal).</span></div>}</div>

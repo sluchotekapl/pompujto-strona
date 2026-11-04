@@ -5,6 +5,9 @@
 // Opcjonalnie: GEMINI_MODEL, AI_MODEL (model Claude), AI_PROVIDER = 'gemini' | 'claude' (gdy ustawione oba klucze).
 // Gdy ustawione są SUPABASE_URL + SUPABASE_ANON_KEY, z AI korzystają tylko zalogowani.
 
+// Limit kosztów (najlepsza możliwa wersja bez bazy): maks. 30 zapytań na 10 minut na użytkownika w jednej instancji funkcji.
+const hits = new Map();
+function limited(id) { const now = Date.now(), arr = (hits.get(id) || []).filter(t => now - t < 600000); arr.push(now); hits.set(id, arr); if (hits.size > 5000) hits.clear(); return arr.length > 30; }
 const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
 // Tekst z odpowiedzi Interactions API (output_text albo ostatni krok z treścią tekstową)
@@ -90,6 +93,8 @@ export default async (req) => {
     if (!auth.startsWith('Bearer ')) return json(401, { error: 'auth', message: 'Zaloguj się, żeby korzystać z Trenera AI.' });
     const u = await fetch(sbUrl.replace(/\/$/, '') + '/auth/v1/user', { headers: { apikey: sbKey, authorization: auth } });
     if (!u.ok) return json(401, { error: 'auth', message: 'Sesja wygasła – zaloguj się ponownie.' });
+    const who = (await u.json().catch(() => ({}))).id || 'anon';
+    if (limited(who)) return json(429, { error: 'limit', message: 'Za dużo pytań do Trenera AI w krótkim czasie. Odczekaj kilka minut.' });
   }
 
   let body;

@@ -6,7 +6,7 @@ import { Brand } from '../components/Logo.jsx';
 import { Seg } from '../components/ui.jsx';
 import { Terms, Privacy } from './Legal.jsx';
 
-const urlCode = () => { try { return (new URLSearchParams(location.search).get('kod') || '').toUpperCase(); } catch (e) { return ''; } };
+const urlCode = () => { try { const q = new URLSearchParams(location.search); return q.get('zaproszenie') ? q.get('zaproszenie').toLowerCase() : (q.get('kod') || '').toUpperCase(); } catch (e) { return ''; } };
 
 export default function Auth({ onDone }) {
   const code0 = urlCode();
@@ -49,7 +49,7 @@ export default function Auth({ onDone }) {
             </div>
           ) : (<>
             <Seg id="auth" value={tab} onChange={t => { setTab(t); setErr(''); }} options={[['in', 'Logowanie'], ['up', 'Załóż konto']]} />
-            {tab === 'up' && code0 && <div className="banner ok"><div><b>Zaproszenie od trenera</b>Kod {code0} jest już wpisany – po rejestracji trafisz do swojego trenera i korzystasz za darmo.</div></div>}
+            {tab === 'up' && code0 && <div className="banner ok"><div><b>Zaproszenie od trenera</b>Zaproszenie jest już wpisane – po rejestracji trafisz do swojego trenera i korzystasz za darmo.</div></div>}
             <form className="stack" onSubmit={submit} noValidate>
               <AnimatePresence initial={false}>
                 {tab === 'up' && !code0 && <motion.div key="k" className="choices" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}>
